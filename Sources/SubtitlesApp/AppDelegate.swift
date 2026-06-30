@@ -25,8 +25,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
     private var document: SubtitleDocument?
     private var timeline: SubtitleTimeline?
     private var renderTimer: Timer?
-    private var globalKeyMonitor: Any?
-    private var localKeyMonitor: Any?
     private lazy var syncCoordinator = PlaybackSyncCoordinator(
         manualTimeProvider: { [weak self] in
             self?.clock.currentMediaTime() ?? 0
@@ -45,19 +43,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
     func applicationDidFinishLaunching(_ notification: Notification) {
         panelController.delegate = self
         setupStatusItem()
-        setupKeyMonitors()
         startRenderTimer()
         panelController.show()
         refreshSubtitleText()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        if let globalKeyMonitor {
-            NSEvent.removeMonitor(globalKeyMonitor)
-        }
-        if let localKeyMonitor {
-            NSEvent.removeMonitor(localKeyMonitor)
-        }
         renderTimer?.invalidate()
     }
 
@@ -72,50 +63,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
         menu.addItem(loadedFileMenuItem!)
         menu.addItem(.separator())
 
-        menu.addItem(NSMenuItem(title: "Load Subtitle...", action: #selector(loadSubtitleFromMenu), keyEquivalent: "o"))
+        menu.addItem(NSMenuItem(title: "Load Subtitle...", action: #selector(loadSubtitleFromMenu), keyEquivalent: ""))
 
         let showHide = NSMenuItem(title: "Hide Subtitle Window", action: #selector(toggleSubtitleWindow), keyEquivalent: "")
         showHideMenuItem = showHide
         menu.addItem(showHide)
 
-        let playPause = NSMenuItem(title: "Play", action: #selector(togglePlayPauseFromMenu), keyEquivalent: " ")
+        let playPause = NSMenuItem(title: "Play", action: #selector(togglePlayPauseFromMenu), keyEquivalent: "")
         playPauseMenuItem = playPause
         menu.addItem(playPause)
 
-        menu.addItem(NSMenuItem(title: "Reset to Start", action: #selector(resetPlaybackFromMenu), keyEquivalent: "r"))
+        menu.addItem(NSMenuItem(title: "Reset to Start", action: #selector(resetPlaybackFromMenu), keyEquivalent: ""))
         menu.addItem(.separator())
 
         offsetMenuItem = NSMenuItem(title: "Offset: 0.0s", action: nil, keyEquivalent: "")
         offsetMenuItem?.isEnabled = false
         menu.addItem(offsetMenuItem!)
-        menu.addItem(NSMenuItem(title: "Offset -0.5s", action: #selector(decreaseOffsetFromMenu), keyEquivalent: "["))
-        menu.addItem(NSMenuItem(title: "Offset +0.5s", action: #selector(increaseOffsetFromMenu), keyEquivalent: "]"))
-        menu.addItem(NSMenuItem(title: "Reset Offset", action: #selector(resetOffsetFromMenu), keyEquivalent: "0"))
+        menu.addItem(NSMenuItem(title: "Offset -0.5s", action: #selector(decreaseOffsetFromMenu), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Offset +0.5s", action: #selector(increaseOffsetFromMenu), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Reset Offset", action: #selector(resetOffsetFromMenu), keyEquivalent: ""))
         menu.addItem(.separator())
 
         menu.addItem(NSMenuItem(title: "Request Accessibility Permission", action: #selector(requestAccessibilityPermission), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Open Caption Settings...", action: #selector(openCaptionSettingsFromMenu), keyEquivalent: ""))
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit Subtitles", action: #selector(quit), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit Subtitles", action: #selector(quit), keyEquivalent: ""))
 
         item.menu = menu
         statusItem = item
         updateMenuState()
-    }
-
-    private func setupKeyMonitors() {
-        globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            DispatchQueue.main.async {
-                _ = self?.handleTransportKey(event, fromLocalMonitor: false)
-            }
-        }
-
-        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            if self?.handleTransportKey(event, fromLocalMonitor: true) == true {
-                return nil
-            }
-            return event
-        }
     }
 
     private func startRenderTimer() {
@@ -242,30 +218,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
         alert.informativeText = "\(url.lastPathComponent)\n\(error.localizedDescription)"
         alert.addButton(withTitle: "OK")
         alert.runModal()
-    }
-
-    private func handleTransportKey(_ event: NSEvent, fromLocalMonitor: Bool) -> Bool {
-        guard isTransportKey(event), timeline != nil else {
-            return false
-        }
-
-        let shouldReset = !clock.isPlaying && clock.currentMediaTime() < 0.05
-        togglePlayback(resetIfAtStart: shouldReset)
-        return fromLocalMonitor
-    }
-
-    private func isTransportKey(_ event: NSEvent) -> Bool {
-        guard event.keyCode == 49 else {
-            return false
-        }
-
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        let hasBlockingModifier = flags.contains(.command) || flags.contains(.control) || flags.contains(.shift)
-        guard !hasBlockingModifier else {
-            return false
-        }
-
-        return flags.isEmpty || flags == .option
     }
 
     private func togglePlayback(resetIfAtStart: Bool) {
