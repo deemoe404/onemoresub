@@ -10,13 +10,15 @@ protocol SubtitlePanelControllerDelegate: AnyObject {
     func subtitlePanelDidRequestClose(_ panelController: SubtitlePanelController)
 }
 
-final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlayViewDelegate, SubtitleToolbarViewDelegate {
+final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlayViewDelegate, SubtitleToolbarViewDelegate, SubtitleResizeRailViewDelegate {
     weak var delegate: SubtitlePanelControllerDelegate?
 
     private let panel: SubtitlePanel
     private let overlayView = SubtitleOverlayView()
     private let toolbarPanel: SubtitlePanel
     private let toolbarView = SubtitleToolbarView()
+    private let resizeRailPanel: SubtitlePanel
+    private let resizeRailView = SubtitleResizeRailView()
     private var chromeVisible = false
     private var pendingChromeHide: DispatchWorkItem?
     private var pendingMoveRestore: DispatchWorkItem?
@@ -38,6 +40,12 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
         )
         toolbarPanel = SubtitlePanel(
             contentRect: NSRect(x: frame.midX - 240, y: frame.maxY + 8, width: 480, height: 36),
+            styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        resizeRailPanel = SubtitlePanel(
+            contentRect: NSRect(x: frame.midX - 180, y: frame.minY - 42, width: 360, height: 34),
             styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -67,9 +75,22 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
         toolbarPanel.titlebarAppearsTransparent = true
         toolbarPanel.alphaValue = 0
 
+        resizeRailPanel.contentView = resizeRailView
+        resizeRailPanel.isOpaque = false
+        resizeRailPanel.backgroundColor = .clear
+        resizeRailPanel.hasShadow = false
+        resizeRailPanel.hidesOnDeactivate = false
+        resizeRailPanel.level = .screenSaver
+        resizeRailPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        resizeRailPanel.titleVisibility = .hidden
+        resizeRailPanel.titlebarAppearsTransparent = true
+        resizeRailPanel.alphaValue = 0
+
         overlayView.delegate = self
         toolbarView.delegate = self
+        resizeRailView.delegate = self
         panel.addChildWindow(toolbarPanel, ordered: .above)
+        panel.addChildWindow(resizeRailPanel, ordered: .above)
     }
 
     func show() {
@@ -183,16 +204,28 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
         delegate?.subtitlePanelDidRequestReset(self)
     }
 
-    func subtitleOverlayViewDidBeginResizingContainer(_ view: SubtitleOverlayView) {
+    func subtitleResizeRailViewDidEnter(_ view: SubtitleResizeRailView) {
+        if isSubtitleWindowMoving {
+            shouldRestoreToolbarAfterMove = true
+            return
+        }
+        setChromeVisible(true, animated: true)
+    }
+
+    func subtitleResizeRailViewDidExit(_ view: SubtitleResizeRailView) {
+        scheduleChromeHideIfNeeded()
+    }
+
+    func subtitleResizeRailViewDidBeginDragging(_ view: SubtitleResizeRailView) {
         isResizingSubtitleWidth = true
         setChromeVisible(true, animated: false)
     }
 
-    func subtitleOverlayView(_ view: SubtitleOverlayView, didResizeContainer edge: SubtitleContainerResizeEdge, by delta: CGFloat) {
+    func subtitleResizeRailView(_ view: SubtitleResizeRailView, didDrag edge: SubtitleResizeRailEdge, by delta: CGFloat) {
         resizeSubtitlePanel(edge: edge, by: delta)
     }
 
-    func subtitleOverlayViewDidEndResizingContainer(_ view: SubtitleOverlayView) {
+    func subtitleResizeRailViewDidEndDragging(_ view: SubtitleResizeRailView) {
         isResizingSubtitleWidth = false
         positionChromeIfVisible()
         scheduleChromeHideIfNeeded()
@@ -241,7 +274,6 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
         pendingChromeHide = nil
 
         guard visible != chromeVisible else {
-            overlayView.setContainerChromeVisible(visible, animated: animated)
             if visible {
                 positionChrome()
             }
@@ -252,21 +284,22 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
 
         if visible {
             positionChrome()
-            overlayView.setContainerChromeVisible(true, animated: animated)
             toolbarPanel.alphaValue = animated ? 0 : 1
+            resizeRailPanel.alphaValue = animated ? 0 : 1
             toolbarPanel.orderFrontRegardless()
-        } else {
-            overlayView.setContainerChromeVisible(false, animated: animated)
+            resizeRailPanel.orderFrontRegardless()
         }
 
         NSAnimationContext.runAnimationGroup { context in
             context.duration = animated ? 0.12 : 0
             toolbarPanel.animator().alphaValue = visible ? 1 : 0
+            resizeRailPanel.animator().alphaValue = visible ? 1 : 0
         } completionHandler: { [weak self] in
             guard let self, !self.chromeVisible else {
                 return
             }
             self.toolbarPanel.orderOut(nil)
+            self.resizeRailPanel.orderOut(nil)
         }
     }
 
@@ -298,6 +331,10 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
             return true
         }
 
+        if resizeRailPanel.isVisible, resizeRailPanel.frame.contains(mouseLocation) {
+            return true
+        }
+
         guard let subtitleFrame = overlayView.subtitleBackdropFrameInScreen() else {
             return false
         }
@@ -305,6 +342,9 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
         var transitFrame = subtitleFrame
         if toolbarPanel.isVisible {
             transitFrame = transitFrame.union(toolbarPanel.frame)
+        }
+        if resizeRailPanel.isVisible {
+            transitFrame = transitFrame.union(resizeRailPanel.frame)
         }
 
         return transitFrame.insetBy(dx: -6, dy: -6).contains(mouseLocation)
@@ -319,6 +359,7 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
 
     private func positionChrome() {
         positionToolbar()
+        positionResizeRail()
     }
 
     private func positionToolbar() {
@@ -346,7 +387,30 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
         )
     }
 
-    private func resizeSubtitlePanel(edge: SubtitleContainerResizeEdge, by delta: CGFloat) {
+    private func positionResizeRail() {
+        let screenFrame = (panel.screen ?? NSScreen.main)?.visibleFrame ?? panel.frame
+        let subtitleFrame = overlayView.subtitleBackdropFrameInScreen() ?? panel.frame
+        let height = ceil(resizeRailView.intrinsicContentSize.height)
+        let maxWidth = max(1, screenFrame.width - 16)
+        let width = min(max(panel.frame.width - 48, 220), maxWidth)
+
+        let minimumX = screenFrame.minX + 8
+        let maximumX = screenFrame.maxX - width - 8
+        let minimumY = screenFrame.minY + 8
+        let maximumY = screenFrame.maxY - height - 8
+
+        let desiredX = panel.frame.midX - width / 2
+        let desiredY = subtitleFrame.minY - height - 8
+        let x = clamped(desiredX, lowerBound: minimumX, upperBound: maximumX)
+        let y = clamped(desiredY, lowerBound: minimumY, upperBound: maximumY)
+
+        resizeRailPanel.setFrame(
+            NSRect(x: x, y: y, width: width, height: height),
+            display: true
+        )
+    }
+
+    private func resizeSubtitlePanel(edge: SubtitleResizeRailEdge, by delta: CGFloat) {
         guard delta.isFinite, abs(delta) > 0.1 else {
             return
         }
