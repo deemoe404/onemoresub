@@ -510,43 +510,17 @@ private struct SubtitleResizeHandleCue: View {
 
     var body: some View {
         ZStack(alignment: side.alignment) {
-            Rectangle()
-                .fill(edgeGradient)
-
             Image(systemName: "line.3.horizontal")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: 20, weight: .regular))
                 .symbolRenderingMode(.monochrome)
-                .foregroundStyle(Color.black.opacity(0.74))
+                .foregroundStyle(Color.black.opacity(0.58))
                 .rotationEffect(.degrees(90))
-                .frame(width: 22, height: 48)
-                .background {
-                    Capsule()
-                        .fill(Color.white.opacity(0.28))
-                        .overlay {
-                            Capsule()
-                                .stroke(Color.white.opacity(0.36), lineWidth: 1)
-                        }
-                }
-                .shadow(color: .white.opacity(0.45), radius: 1, y: 0)
-                .shadow(color: .black.opacity(0.18), radius: 4, y: 1)
-                .padding(side.paddingEdge, 5)
+                .padding(side.paddingEdge, 4)
         }
         .frame(width: SubtitlePanelGeometry.resizeEdgeThickness)
         .frame(maxHeight: .infinity)
         .contentShape(Rectangle())
         .accessibilityHidden(true)
-    }
-
-    private var edgeGradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                Color.black.opacity(0.16),
-                Color.black.opacity(0.06),
-                Color.clear
-            ],
-            startPoint: side == .left ? .leading : .trailing,
-            endPoint: side == .left ? .trailing : .leading
-        )
     }
 }
 
