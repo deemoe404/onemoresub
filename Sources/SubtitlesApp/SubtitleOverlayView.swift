@@ -495,30 +495,12 @@ private enum SubtitleResizeHandleSide {
         }
     }
 
-    var edge: Edge.Set {
+    var paddingEdge: Edge.Set {
         switch self {
         case .left:
             return .leading
         case .right:
             return .trailing
-        }
-    }
-
-    var gradientStart: UnitPoint {
-        switch self {
-        case .left:
-            return .leading
-        case .right:
-            return .trailing
-        }
-    }
-
-    var gradientEnd: UnitPoint {
-        switch self {
-        case .left:
-            return .trailing
-        case .right:
-            return .leading
         }
     }
 }
@@ -529,38 +511,42 @@ private struct SubtitleResizeHandleCue: View {
     var body: some View {
         ZStack(alignment: side.alignment) {
             Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            .primary.opacity(0.20),
-                            .primary.opacity(0.08),
-                            .clear
-                        ],
-                        startPoint: side.gradientStart,
-                        endPoint: side.gradientEnd
-                    )
-                )
+                .fill(edgeGradient)
 
-            VStack(spacing: 6) {
-                ForEach(0..<3) { _ in
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 17, weight: .semibold))
+                .symbolRenderingMode(.monochrome)
+                .foregroundStyle(Color.black.opacity(0.74))
+                .rotationEffect(.degrees(90))
+                .frame(width: 22, height: 48)
+                .background {
                     Capsule()
-                        .frame(width: 3, height: 16)
+                        .fill(Color.white.opacity(0.28))
+                        .overlay {
+                            Capsule()
+                                .stroke(Color.white.opacity(0.36), lineWidth: 1)
+                        }
                 }
-            }
-            .foregroundStyle(.primary.opacity(0.82))
-            .frame(width: 15, height: 68)
-            .background(.regularMaterial, in: Capsule())
-            .overlay {
-                Capsule()
-                    .stroke(.primary.opacity(0.24), lineWidth: 1)
-            }
-            .shadow(color: .black.opacity(0.18), radius: 5, y: 1)
-            .padding(side.edge, 7)
+                .shadow(color: .white.opacity(0.45), radius: 1, y: 0)
+                .shadow(color: .black.opacity(0.18), radius: 4, y: 1)
+                .padding(side.paddingEdge, 5)
         }
         .frame(width: SubtitlePanelGeometry.resizeEdgeThickness)
         .frame(maxHeight: .infinity)
         .contentShape(Rectangle())
         .accessibilityHidden(true)
+    }
+
+    private var edgeGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.black.opacity(0.16),
+                Color.black.opacity(0.06),
+                Color.clear
+            ],
+            startPoint: side == .left ? .leading : .trailing,
+            endPoint: side == .left ? .trailing : .leading
+        )
     }
 }
 
