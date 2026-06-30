@@ -16,8 +16,6 @@ final class SubtitleOverlayView: NSView {
     weak var delegate: SubtitleOverlayViewDelegate?
 
     private static let placeholderText = "Drop SRT or VTT subtitle here"
-    private static let visibleBorderColor = NSColor.white.withAlphaComponent(0.16).cgColor
-    private static let hiddenBorderColor = NSColor.clear.cgColor
 
     var subtitleText: String = placeholderText {
         didSet {
@@ -34,6 +32,7 @@ final class SubtitleOverlayView: NSView {
     private let subtitleBackdropView = NSView()
     private let subtitleLabel = NSTextField(labelWithString: placeholderText)
     private let metadataLabel = NSTextField(labelWithString: "00:00.0  Offset +0.0s")
+    private let toolbarContainerView = NSView()
     private let controlsStack = NSStackView()
     private let playPauseButton = NSButton(title: "Play", target: nil, action: nil)
 
@@ -112,8 +111,7 @@ final class SubtitleOverlayView: NSView {
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
         layer?.cornerRadius = 8
-        layer?.borderWidth = 1
-        layer?.borderColor = Self.hiddenBorderColor
+        layer?.borderWidth = 0
         registerForDraggedTypes([.fileURL])
 
         subtitleBackdropView.translatesAutoresizingMaskIntoConstraints = false
@@ -133,13 +131,20 @@ final class SubtitleOverlayView: NSView {
         metadataLabel.alignment = .center
         metadataLabel.alphaValue = 0
 
+        toolbarContainerView.translatesAutoresizingMaskIntoConstraints = false
+        toolbarContainerView.wantsLayer = true
+        toolbarContainerView.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.92).cgColor
+        toolbarContainerView.layer?.cornerRadius = 8
+        toolbarContainerView.layer?.borderWidth = 1
+        toolbarContainerView.layer?.borderColor = NSColor.black.withAlphaComponent(0.12).cgColor
+        toolbarContainerView.alphaValue = 0
+        toolbarContainerView.isHidden = true
+
         controlsStack.translatesAutoresizingMaskIntoConstraints = false
         controlsStack.orientation = .horizontal
         controlsStack.alignment = .centerY
         controlsStack.distribution = .fill
         controlsStack.spacing = 8
-        controlsStack.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 8)
-        controlsStack.isHidden = true
 
         let controls = [
             makeButton("W-", action: #selector(decreaseWindowSize)),
@@ -161,7 +166,8 @@ final class SubtitleOverlayView: NSView {
         addSubview(subtitleBackdropView)
         subtitleBackdropView.addSubview(subtitleLabel)
         addSubview(metadataLabel)
-        addSubview(controlsStack)
+        addSubview(toolbarContainerView)
+        toolbarContainerView.addSubview(controlsStack)
 
         NSLayoutConstraint.activate([
             subtitleBackdropView.centerXAnchor.constraint(equalTo: centerXAnchor),
@@ -178,11 +184,15 @@ final class SubtitleOverlayView: NSView {
             metadataLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
             metadataLabel.topAnchor.constraint(equalTo: subtitleBackdropView.bottomAnchor, constant: 8),
 
-            controlsStack.topAnchor.constraint(equalTo: topAnchor, constant: 10),
-            controlsStack.centerXAnchor.constraint(equalTo: centerXAnchor),
-            controlsStack.heightAnchor.constraint(equalToConstant: 28),
-            controlsStack.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 12),
-            controlsStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12)
+            toolbarContainerView.centerXAnchor.constraint(equalTo: subtitleBackdropView.centerXAnchor),
+            toolbarContainerView.bottomAnchor.constraint(equalTo: subtitleBackdropView.topAnchor, constant: 4),
+            toolbarContainerView.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 12),
+            toolbarContainerView.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
+
+            controlsStack.leadingAnchor.constraint(equalTo: toolbarContainerView.leadingAnchor, constant: 8),
+            controlsStack.trailingAnchor.constraint(equalTo: toolbarContainerView.trailingAnchor, constant: -8),
+            controlsStack.topAnchor.constraint(equalTo: toolbarContainerView.topAnchor, constant: 4),
+            controlsStack.bottomAnchor.constraint(equalTo: toolbarContainerView.bottomAnchor, constant: -4)
         ])
 
         updateSubtitleText()
@@ -202,11 +212,19 @@ final class SubtitleOverlayView: NSView {
     }
 
     private func setControlsVisible(_ visible: Bool) {
+        if visible {
+            toolbarContainerView.isHidden = false
+        }
+
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.12
-            layer?.borderColor = visible ? Self.visibleBorderColor : Self.hiddenBorderColor
-            controlsStack.animator().isHidden = !visible
+            toolbarContainerView.animator().alphaValue = visible ? 1 : 0
             metadataLabel.animator().alphaValue = visible ? 1 : 0
+        } completionHandler: { [weak self] in
+            guard !visible else {
+                return
+            }
+            self?.toolbarContainerView.isHidden = true
         }
     }
 
