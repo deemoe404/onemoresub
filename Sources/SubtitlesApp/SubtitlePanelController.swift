@@ -88,13 +88,18 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
     }
 
     func setPlaybackState(isPlaying: Bool, time: TimeInterval, offset: TimeInterval, sourceLabel: String = "Manual") {
-        overlayView.setPlaybackState(isPlaying: isPlaying, time: time, offset: offset, sourceLabel: sourceLabel)
-        toolbarView.setPlaybackState(isPlaying: isPlaying)
+        toolbarView.setPlaybackState(
+            isPlaying: isPlaying,
+            time: time,
+            offset: offset,
+            sourceLabel: sourceLabel
+        )
         positionToolbarIfVisible()
     }
 
     func setLoadedFileName(_ fileName: String) {
-        overlayView.loadedFileName = fileName
+        toolbarView.setLoadedFileName(fileName)
+        positionToolbarIfVisible()
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -197,7 +202,6 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
         }
 
         chromeVisible = visible
-        overlayView.setMetadataVisible(visible)
 
         if visible {
             positionToolbar()

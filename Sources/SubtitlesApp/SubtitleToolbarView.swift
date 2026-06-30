@@ -1,4 +1,6 @@
 @preconcurrency import Cocoa
+import Combine
+import SwiftUI
 
 protocol SubtitleToolbarViewDelegate: AnyObject {
     func subtitleToolbarViewDidEnter(_ view: SubtitleToolbarView)
@@ -15,13 +17,15 @@ protocol SubtitleToolbarViewDelegate: AnyObject {
 final class SubtitleToolbarView: NSView {
     weak var delegate: SubtitleToolbarViewDelegate?
 
-    private let controlsStack = NSStackView()
-    private let playPauseButton = NSButton(title: "Play", target: nil, action: nil)
+    private let model = SubtitleToolbarModel()
+    private var hostingView: NSHostingView<SubtitleToolbarContentView>?
     private var trackingAreaRef: NSTrackingArea?
 
     override var intrinsicContentSize: NSSize {
-        let stackSize = controlsStack.fittingSize
-        return NSSize(width: stackSize.width + 16, height: stackSize.height + 8)
+        guard let hostingView else {
+            return NSSize(width: 520, height: 38)
+        }
+        return hostingView.fittingSize
     }
 
     override init(frame frameRect: NSRect) {
@@ -58,99 +62,159 @@ final class SubtitleToolbarView: NSView {
         delegate?.subtitleToolbarViewDidExit(self)
     }
 
-    func setPlaybackState(isPlaying: Bool) {
-        playPauseButton.title = isPlaying ? "Pause" : "Play"
+    func setPlaybackState(isPlaying: Bool, time: TimeInterval, offset: TimeInterval, sourceLabel: String) {
+        model.isPlaying = isPlaying
+        model.playbackTime = time
+        model.offset = offset
+        model.sourceLabel = sourceLabel
+        invalidateIntrinsicContentSize()
+    }
+
+    func setLoadedFileName(_ fileName: String?) {
+        model.loadedFileName = fileName
         invalidateIntrinsicContentSize()
     }
 
     private func setupView() {
         translatesAutoresizingMaskIntoConstraints = true
         autoresizingMask = [.width, .height]
-        wantsLayer = true
-        layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.92).cgColor
-        layer?.cornerRadius = 8
-        layer?.borderWidth = 1
-        layer?.borderColor = NSColor.black.withAlphaComponent(0.12).cgColor
 
-        controlsStack.translatesAutoresizingMaskIntoConstraints = false
-        controlsStack.orientation = .horizontal
-        controlsStack.alignment = .centerY
-        controlsStack.distribution = .fill
-        controlsStack.spacing = 8
+        model.requestScale = { [weak self] factor in
+            guard let self else {
+                return
+            }
+            delegate?.subtitleToolbarView(self, didRequestScale: factor)
+        }
+        model.adjustOffset = { [weak self] delta in
+            guard let self else {
+                return
+            }
+            delegate?.subtitleToolbarView(self, didAdjustOffsetBy: delta)
+        }
+        model.requestCaptionSettings = { [weak self] in
+            guard let self else {
+                return
+            }
+            delegate?.subtitleToolbarViewDidRequestCaptionSettings(self)
+        }
+        model.requestAppleTVCalibration = { [weak self] in
+            guard let self else {
+                return
+            }
+            delegate?.subtitleToolbarViewDidRequestAppleTVCalibration(self)
+        }
+        model.requestPlayPause = { [weak self] in
+            guard let self else {
+                return
+            }
+            delegate?.subtitleToolbarViewDidRequestPlayPause(self)
+        }
+        model.requestReset = { [weak self] in
+            guard let self else {
+                return
+            }
+            delegate?.subtitleToolbarViewDidRequestReset(self)
+        }
+        model.requestClose = { [weak self] in
+            guard let self else {
+                return
+            }
+            delegate?.subtitleToolbarViewDidRequestClose(self)
+        }
 
-        let controls = [
-            makeButton("W-", action: #selector(decreaseWindowSize)),
-            makeButton("W+", action: #selector(increaseWindowSize)),
-            makeButton("-0.5s", action: #selector(decreaseOffset)),
-            makeButton("+0.5s", action: #selector(increaseOffset)),
-            makeButton("Captions", action: #selector(openCaptionSettings)),
-            makeButton("Calibrate TV", action: #selector(calibrateAppleTV)),
-            playPauseButton,
-            makeButton("Reset", action: #selector(resetPlayback)),
-            makeButton("Close", action: #selector(closePanel))
-        ]
-
-        playPauseButton.target = self
-        playPauseButton.action = #selector(playPause)
-        styleButton(playPauseButton)
-        controls.forEach { controlsStack.addArrangedSubview($0) }
-
-        addSubview(controlsStack)
+        let contentView = NSHostingView(rootView: SubtitleToolbarContentView(model: model))
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.setContentHuggingPriority(.required, for: .horizontal)
+        contentView.setContentHuggingPriority(.required, for: .vertical)
+        addSubview(contentView)
+        hostingView = contentView
 
         NSLayoutConstraint.activate([
-            controlsStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            controlsStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            controlsStack.topAnchor.constraint(equalTo: topAnchor, constant: 4),
-            controlsStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4)
+            contentView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            contentView.topAnchor.constraint(equalTo: topAnchor),
+            contentView.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
     }
+}
 
-    private func makeButton(_ title: String, action: Selector) -> NSButton {
-        let button = NSButton(title: title, target: self, action: action)
-        styleButton(button)
-        return button
+private final class SubtitleToolbarModel: ObservableObject {
+    @Published var isPlaying = false
+    @Published var playbackTime: TimeInterval = 0
+    @Published var offset: TimeInterval = 0
+    @Published var sourceLabel = "Manual"
+    @Published var loadedFileName: String?
+
+    var requestScale: ((CGFloat) -> Void)?
+    var adjustOffset: ((TimeInterval) -> Void)?
+    var requestCaptionSettings: (() -> Void)?
+    var requestAppleTVCalibration: (() -> Void)?
+    var requestPlayPause: (() -> Void)?
+    var requestReset: (() -> Void)?
+    var requestClose: (() -> Void)?
+
+    var statusText: String {
+        let file = loadedFileName.map { "  \($0)" } ?? ""
+        return "\(sourceLabel)  \(formatTime(playbackTime))  Offset \(formatOffset(offset))\(file)"
     }
 
-    private func styleButton(_ button: NSButton) {
-        button.bezelStyle = .rounded
-        button.controlSize = .small
-        button.font = .systemFont(ofSize: 11, weight: .medium)
-        button.setButtonType(.momentaryPushIn)
+    var playPauseTitle: String {
+        isPlaying ? "Pause" : "Play"
     }
 
-    @objc private func decreaseWindowSize() {
-        delegate?.subtitleToolbarView(self, didRequestScale: 0.9)
+    private func formatTime(_ time: TimeInterval) -> String {
+        let clamped = max(0, time)
+        let minutes = Int(clamped) / 60
+        let seconds = clamped.truncatingRemainder(dividingBy: 60)
+        return String(format: "%02d:%04.1f", minutes, seconds)
     }
 
-    @objc private func increaseWindowSize() {
-        delegate?.subtitleToolbarView(self, didRequestScale: 1.1)
+    private func formatOffset(_ offset: TimeInterval) -> String {
+        String(format: "%+.1fs", offset)
+    }
+}
+
+private struct SubtitleToolbarContentView: View {
+    @ObservedObject var model: SubtitleToolbarModel
+
+    var body: some View {
+        GlassEffectContainer {
+            HStack(spacing: 10) {
+                Text(model.statusText)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: 360, alignment: .leading)
+                    .layoutPriority(0)
+
+                Divider()
+                    .frame(height: 18)
+
+                HStack(spacing: 6) {
+                    toolbarButton("W-") { model.requestScale?(0.9) }
+                    toolbarButton("W+") { model.requestScale?(1.1) }
+                    toolbarButton("-0.5s") { model.adjustOffset?(-0.5) }
+                    toolbarButton("+0.5s") { model.adjustOffset?(0.5) }
+                    toolbarButton("Captions") { model.requestCaptionSettings?() }
+                    toolbarButton("Calibrate TV") { model.requestAppleTVCalibration?() }
+                    toolbarButton(model.playPauseTitle) { model.requestPlayPause?() }
+                    toolbarButton("Reset") { model.requestReset?() }
+                    toolbarButton("Close") { model.requestClose?() }
+                }
+                .layoutPriority(1)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .glassEffect(.regular.interactive(), in: Capsule())
+        }
+        .fixedSize(horizontal: true, vertical: true)
     }
 
-    @objc private func decreaseOffset() {
-        delegate?.subtitleToolbarView(self, didAdjustOffsetBy: -0.5)
-    }
-
-    @objc private func increaseOffset() {
-        delegate?.subtitleToolbarView(self, didAdjustOffsetBy: 0.5)
-    }
-
-    @objc private func openCaptionSettings() {
-        delegate?.subtitleToolbarViewDidRequestCaptionSettings(self)
-    }
-
-    @objc private func calibrateAppleTV() {
-        delegate?.subtitleToolbarViewDidRequestAppleTVCalibration(self)
-    }
-
-    @objc private func playPause() {
-        delegate?.subtitleToolbarViewDidRequestPlayPause(self)
-    }
-
-    @objc private func resetPlayback() {
-        delegate?.subtitleToolbarViewDidRequestReset(self)
-    }
-
-    @objc private func closePanel() {
-        delegate?.subtitleToolbarViewDidRequestClose(self)
+    private func toolbarButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(title, action: action)
+            .buttonStyle(.glass)
+            .controlSize(.small)
     }
 }
