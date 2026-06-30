@@ -1,0 +1,239 @@
+@preconcurrency import Cocoa
+
+protocol SubtitleOverlayViewDelegate: AnyObject {
+    func subtitleOverlayViewDidRequestPlayPause(_ view: SubtitleOverlayView)
+    func subtitleOverlayViewDidRequestReset(_ view: SubtitleOverlayView)
+    func subtitleOverlayView(_ view: SubtitleOverlayView, didAdjustOffsetBy delta: TimeInterval)
+    func subtitleOverlayView(_ view: SubtitleOverlayView, didRequestLoadURL url: URL)
+    func subtitleOverlayViewDidRequestClose(_ view: SubtitleOverlayView)
+    func subtitleOverlayView(_ view: SubtitleOverlayView, didRequestScale factor: CGFloat)
+}
+
+final class SubtitleOverlayView: NSView {
+    weak var delegate: SubtitleOverlayViewDelegate?
+
+    var subtitleText: String = "Drop SRT or VTT subtitle here" {
+        didSet {
+            subtitleLabel.stringValue = subtitleText
+        }
+    }
+
+    var loadedFileName: String? {
+        didSet {
+            updateMetadata()
+        }
+    }
+
+    private let subtitleLabel = NSTextField(labelWithString: "Drop SRT or VTT subtitle here")
+    private let metadataLabel = NSTextField(labelWithString: "00:00.0  Offset +0.0s")
+    private let controlsStack = NSStackView()
+    private let playPauseButton = NSButton(title: "Play", target: nil, action: nil)
+
+    private var fontSize: CGFloat = 36
+    private var playbackTime: TimeInterval = 0
+    private var offset: TimeInterval = 0
+    private var isPlaying = false
+    private var trackingAreaRef: NSTrackingArea?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setupView()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupView()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingAreaRef {
+            removeTrackingArea(trackingAreaRef)
+        }
+        let trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        trackingAreaRef = trackingArea
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        setControlsVisible(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        setControlsVisible(false)
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        firstSupportedURL(from: sender.draggingPasteboard) == nil ? [] : .copy
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let url = firstSupportedURL(from: sender.draggingPasteboard) else {
+            return false
+        }
+        delegate?.subtitleOverlayView(self, didRequestLoadURL: url)
+        return true
+    }
+
+    func setPlaybackState(isPlaying: Bool, time: TimeInterval, offset: TimeInterval) {
+        self.isPlaying = isPlaying
+        self.playbackTime = time
+        self.offset = offset
+        playPauseButton.title = isPlaying ? "Pause" : "Play"
+        updateMetadata()
+    }
+
+    private func setupView() {
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.black.withAlphaComponent(0.72).cgColor
+        layer?.cornerRadius = 8
+        layer?.borderWidth = 1
+        layer?.borderColor = NSColor.white.withAlphaComponent(0.16).cgColor
+        registerForDraggedTypes([.fileURL])
+
+        subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
+        subtitleLabel.textColor = .white
+        subtitleLabel.font = .systemFont(ofSize: fontSize, weight: .semibold)
+        subtitleLabel.alignment = .center
+        subtitleLabel.maximumNumberOfLines = 3
+        subtitleLabel.lineBreakMode = .byWordWrapping
+
+        metadataLabel.translatesAutoresizingMaskIntoConstraints = false
+        metadataLabel.textColor = NSColor.white.withAlphaComponent(0.74)
+        metadataLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+        metadataLabel.alignment = .center
+
+        controlsStack.translatesAutoresizingMaskIntoConstraints = false
+        controlsStack.orientation = .horizontal
+        controlsStack.alignment = .centerY
+        controlsStack.distribution = .fill
+        controlsStack.spacing = 8
+        controlsStack.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 8)
+        controlsStack.isHidden = true
+
+        let controls = [
+            makeButton("A-", action: #selector(decreaseFontSize)),
+            makeButton("A+", action: #selector(increaseFontSize)),
+            makeButton("W-", action: #selector(decreaseWindowSize)),
+            makeButton("W+", action: #selector(increaseWindowSize)),
+            makeButton("-0.5s", action: #selector(decreaseOffset)),
+            makeButton("+0.5s", action: #selector(increaseOffset)),
+            playPauseButton,
+            makeButton("Reset", action: #selector(resetPlayback)),
+            makeButton("Close", action: #selector(closePanel))
+        ]
+
+        playPauseButton.target = self
+        playPauseButton.action = #selector(playPause)
+        styleButton(playPauseButton)
+        controls.forEach { controlsStack.addArrangedSubview($0) }
+
+        addSubview(subtitleLabel)
+        addSubview(metadataLabel)
+        addSubview(controlsStack)
+
+        NSLayoutConstraint.activate([
+            subtitleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 24),
+            subtitleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -24),
+            subtitleLabel.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -6),
+
+            metadataLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            metadataLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+            metadataLabel.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 8),
+
+            controlsStack.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+            controlsStack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            controlsStack.heightAnchor.constraint(equalToConstant: 28),
+            controlsStack.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 12),
+            controlsStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12)
+        ])
+    }
+
+    private func makeButton(_ title: String, action: Selector) -> NSButton {
+        let button = NSButton(title: title, target: self, action: action)
+        styleButton(button)
+        return button
+    }
+
+    private func styleButton(_ button: NSButton) {
+        button.bezelStyle = .rounded
+        button.controlSize = .small
+        button.font = .systemFont(ofSize: 11, weight: .medium)
+        button.setButtonType(.momentaryPushIn)
+    }
+
+    private func setControlsVisible(_ visible: Bool) {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.12
+            controlsStack.animator().isHidden = !visible
+            metadataLabel.animator().alphaValue = visible ? 1 : 0.72
+        }
+    }
+
+    private func updateMetadata() {
+        let file = loadedFileName.map { "  \($0)" } ?? ""
+        metadataLabel.stringValue = "\(formatTime(playbackTime))  Offset \(formatOffset(offset))\(file)"
+    }
+
+    private func formatTime(_ time: TimeInterval) -> String {
+        let clamped = max(0, time)
+        let minutes = Int(clamped) / 60
+        let seconds = clamped.truncatingRemainder(dividingBy: 60)
+        return String(format: "%02d:%04.1f", minutes, seconds)
+    }
+
+    private func formatOffset(_ offset: TimeInterval) -> String {
+        String(format: "%+.1fs", offset)
+    }
+
+    private func firstSupportedURL(from pasteboard: NSPasteboard) -> URL? {
+        let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
+        let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: options) as? [URL]
+        return urls?.first { url in
+            ["srt", "vtt", "webvtt"].contains(url.pathExtension.lowercased())
+        }
+    }
+
+    @objc private func decreaseFontSize() {
+        fontSize = max(18, fontSize - 2)
+        subtitleLabel.font = .systemFont(ofSize: fontSize, weight: .semibold)
+    }
+
+    @objc private func increaseFontSize() {
+        fontSize = min(72, fontSize + 2)
+        subtitleLabel.font = .systemFont(ofSize: fontSize, weight: .semibold)
+    }
+
+    @objc private func decreaseWindowSize() {
+        delegate?.subtitleOverlayView(self, didRequestScale: 0.9)
+    }
+
+    @objc private func increaseWindowSize() {
+        delegate?.subtitleOverlayView(self, didRequestScale: 1.1)
+    }
+
+    @objc private func decreaseOffset() {
+        delegate?.subtitleOverlayView(self, didAdjustOffsetBy: -0.5)
+    }
+
+    @objc private func increaseOffset() {
+        delegate?.subtitleOverlayView(self, didAdjustOffsetBy: 0.5)
+    }
+
+    @objc private func playPause() {
+        delegate?.subtitleOverlayViewDidRequestPlayPause(self)
+    }
+
+    @objc private func resetPlayback() {
+        delegate?.subtitleOverlayViewDidRequestReset(self)
+    }
+
+    @objc private func closePanel() {
+        delegate?.subtitleOverlayViewDidRequestClose(self)
+    }
+}

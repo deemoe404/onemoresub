@@ -1,0 +1,294 @@
+@preconcurrency import ApplicationServices
+@preconcurrency import Cocoa
+import SubtitleCore
+import UniformTypeIdentifiers
+
+final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControllerDelegate {
+    private let clock = SubtitlePlayerClock()
+    private let panelController = SubtitlePanelController()
+
+    private var statusItem: NSStatusItem?
+    private var showHideMenuItem: NSMenuItem?
+    private var playPauseMenuItem: NSMenuItem?
+    private var offsetMenuItem: NSMenuItem?
+    private var loadedFileMenuItem: NSMenuItem?
+
+    private var document: SubtitleDocument?
+    private var timeline: SubtitleTimeline?
+    private var renderTimer: Timer?
+    private var globalKeyMonitor: Any?
+    private var localKeyMonitor: Any?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        panelController.delegate = self
+        setupStatusItem()
+        setupKeyMonitors()
+        startRenderTimer()
+        panelController.show()
+        refreshSubtitleText()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        if let globalKeyMonitor {
+            NSEvent.removeMonitor(globalKeyMonitor)
+        }
+        if let localKeyMonitor {
+            NSEvent.removeMonitor(localKeyMonitor)
+        }
+        renderTimer?.invalidate()
+    }
+
+    private func setupStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        item.button?.title = "Sub"
+        item.button?.toolTip = "Subtitles"
+
+        let menu = NSMenu()
+        loadedFileMenuItem = NSMenuItem(title: "No Subtitle Loaded", action: nil, keyEquivalent: "")
+        loadedFileMenuItem?.isEnabled = false
+        menu.addItem(loadedFileMenuItem!)
+        menu.addItem(.separator())
+
+        menu.addItem(NSMenuItem(title: "Load Subtitle...", action: #selector(loadSubtitleFromMenu), keyEquivalent: "o"))
+
+        let showHide = NSMenuItem(title: "Hide Subtitle Window", action: #selector(toggleSubtitleWindow), keyEquivalent: "")
+        showHideMenuItem = showHide
+        menu.addItem(showHide)
+
+        let playPause = NSMenuItem(title: "Play", action: #selector(togglePlayPauseFromMenu), keyEquivalent: " ")
+        playPauseMenuItem = playPause
+        menu.addItem(playPause)
+
+        menu.addItem(NSMenuItem(title: "Reset to Start", action: #selector(resetPlaybackFromMenu), keyEquivalent: "r"))
+        menu.addItem(.separator())
+
+        offsetMenuItem = NSMenuItem(title: "Offset: 0.0s", action: nil, keyEquivalent: "")
+        offsetMenuItem?.isEnabled = false
+        menu.addItem(offsetMenuItem!)
+        menu.addItem(NSMenuItem(title: "Offset -0.5s", action: #selector(decreaseOffsetFromMenu), keyEquivalent: "["))
+        menu.addItem(NSMenuItem(title: "Offset +0.5s", action: #selector(increaseOffsetFromMenu), keyEquivalent: "]"))
+        menu.addItem(NSMenuItem(title: "Reset Offset", action: #selector(resetOffsetFromMenu), keyEquivalent: "0"))
+        menu.addItem(.separator())
+
+        menu.addItem(NSMenuItem(title: "Request Hotkey Permission", action: #selector(requestHotkeyPermission), keyEquivalent: ""))
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: "Quit Subtitles", action: #selector(quit), keyEquivalent: "q"))
+
+        item.menu = menu
+        statusItem = item
+        updateMenuState()
+    }
+
+    private func setupKeyMonitors() {
+        globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            DispatchQueue.main.async {
+                _ = self?.handleTransportKey(event, fromLocalMonitor: false)
+            }
+        }
+
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if self?.handleTransportKey(event, fromLocalMonitor: true) == true {
+                return nil
+            }
+            return event
+        }
+    }
+
+    private func startRenderTimer() {
+        renderTimer = Timer.scheduledTimer(
+            timeInterval: 0.08,
+            target: self,
+            selector: #selector(renderTimerDidFire),
+            userInfo: nil,
+            repeats: true
+        )
+        renderTimer?.tolerance = 0.02
+    }
+
+    @objc private func renderTimerDidFire() {
+        refreshSubtitleText()
+    }
+
+    @objc private func loadSubtitleFromMenu() {
+        let openPanel = NSOpenPanel()
+        openPanel.title = "Load Subtitle"
+        openPanel.prompt = "Load"
+        openPanel.allowsMultipleSelection = false
+        openPanel.canChooseDirectories = false
+        openPanel.canChooseFiles = true
+        openPanel.allowedContentTypes = [
+            UTType(filenameExtension: "srt"),
+            UTType(filenameExtension: "vtt"),
+            UTType(filenameExtension: "webvtt")
+        ].compactMap { $0 }
+
+        openPanel.begin { [weak self] response in
+            guard response == .OK, let url = openPanel.url else {
+                return
+            }
+            self?.loadSubtitle(from: url)
+        }
+    }
+
+    @objc private func toggleSubtitleWindow() {
+        if panelController.isVisible {
+            panelController.hide()
+        } else {
+            panelController.show()
+        }
+        updateMenuState()
+    }
+
+    @objc private func togglePlayPauseFromMenu() {
+        togglePlayback(resetIfAtStart: false)
+    }
+
+    @objc private func resetPlaybackFromMenu() {
+        resetPlayback()
+    }
+
+    @objc private func decreaseOffsetFromMenu() {
+        adjustOffset(by: -0.5)
+    }
+
+    @objc private func increaseOffsetFromMenu() {
+        adjustOffset(by: 0.5)
+    }
+
+    @objc private func resetOffsetFromMenu() {
+        clock.setOffset(0)
+        updateMenuState()
+        refreshSubtitleText()
+    }
+
+    @objc private func requestHotkeyPermission() {
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
+    }
+
+    @objc private func quit() {
+        NSApplication.shared.terminate(nil)
+    }
+
+    private func loadSubtitle(from url: URL) {
+        do {
+            let data = try Data(contentsOf: url)
+            let parsed = try SubtitleParser.parse(data: data, sourceURL: url)
+            document = parsed
+            timeline = SubtitleTimeline(document: parsed)
+            clock.reset()
+            panelController.show()
+            panelController.setLoadedFileName(url.lastPathComponent)
+            updateMenuState()
+            refreshSubtitleText()
+        } catch {
+            presentLoadError(error, url: url)
+        }
+    }
+
+    private func presentLoadError(_ error: Error, url: URL) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Could not load subtitle"
+        alert.informativeText = "\(url.lastPathComponent)\n\(error.localizedDescription)"
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
+    private func handleTransportKey(_ event: NSEvent, fromLocalMonitor: Bool) -> Bool {
+        guard isTransportKey(event), timeline != nil else {
+            return false
+        }
+
+        let shouldReset = !clock.isPlaying && clock.currentMediaTime() < 0.05
+        togglePlayback(resetIfAtStart: shouldReset)
+        return fromLocalMonitor
+    }
+
+    private func isTransportKey(_ event: NSEvent) -> Bool {
+        guard event.keyCode == 49 else {
+            return false
+        }
+
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let hasBlockingModifier = flags.contains(.command) || flags.contains(.control) || flags.contains(.shift)
+        guard !hasBlockingModifier else {
+            return false
+        }
+
+        return flags.isEmpty || flags == .option
+    }
+
+    private func togglePlayback(resetIfAtStart: Bool) {
+        guard timeline != nil else {
+            panelController.showMessage("Drop SRT or VTT subtitle here")
+            return
+        }
+
+        if clock.isPlaying {
+            clock.pause()
+        } else {
+            clock.play(resetToStart: resetIfAtStart)
+        }
+        updateMenuState()
+        refreshSubtitleText()
+    }
+
+    private func resetPlayback() {
+        clock.reset()
+        clock.pause()
+        updateMenuState()
+        refreshSubtitleText()
+    }
+
+    private func adjustOffset(by delta: TimeInterval) {
+        clock.adjustOffset(by: delta)
+        updateMenuState()
+        refreshSubtitleText()
+    }
+
+    private func refreshSubtitleText() {
+        guard let timeline else {
+            panelController.showMessage("Drop SRT or VTT subtitle here")
+            panelController.setPlaybackState(isPlaying: false, time: 0, offset: clock.offset)
+            return
+        }
+
+        let currentTime = clock.currentMediaTime()
+        let activeText = timeline
+            .activeCues(at: currentTime, offset: clock.offset)
+            .map(\.text)
+            .joined(separator: "\n\n")
+
+        panelController.showMessage(activeText)
+        panelController.setPlaybackState(isPlaying: clock.isPlaying, time: currentTime, offset: clock.offset)
+    }
+
+    private func updateMenuState() {
+        showHideMenuItem?.title = panelController.isVisible ? "Hide Subtitle Window" : "Show Subtitle Window"
+        playPauseMenuItem?.title = clock.isPlaying ? "Pause" : "Play"
+        offsetMenuItem?.title = String(format: "Offset: %.1fs", clock.offset)
+        loadedFileMenuItem?.title = document?.sourceURL?.lastPathComponent ?? "No Subtitle Loaded"
+    }
+
+    func subtitlePanelDidRequestPlayPause(_ panelController: SubtitlePanelController) {
+        togglePlayback(resetIfAtStart: false)
+    }
+
+    func subtitlePanelDidRequestReset(_ panelController: SubtitlePanelController) {
+        resetPlayback()
+    }
+
+    func subtitlePanel(_ panelController: SubtitlePanelController, didAdjustOffsetBy delta: TimeInterval) {
+        adjustOffset(by: delta)
+    }
+
+    func subtitlePanel(_ panelController: SubtitlePanelController, didRequestLoadURL url: URL) {
+        loadSubtitle(from: url)
+    }
+
+    func subtitlePanelDidRequestClose(_ panelController: SubtitlePanelController) {
+        panelController.hide()
+        updateMenuState()
+    }
+}
