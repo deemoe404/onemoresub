@@ -92,6 +92,15 @@ final class SubtitleOverlayView: NSView {
         return self
     }
 
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        guard let event else {
+            return false
+        }
+
+        let point = convert(event.locationInWindow, from: nil)
+        return isInteractivePoint(point)
+    }
+
     override func mouseEntered(with event: NSEvent) {
         guard let role = trackingRole(from: event) else {
             return

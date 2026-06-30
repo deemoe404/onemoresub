@@ -51,6 +51,10 @@ final class SubtitleToolbarView: NSView {
         trackingAreaRef = trackingArea
     }
 
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
     override func mouseEntered(with event: NSEvent) {
         delegate?.subtitleToolbarViewDidEnter(self)
     }
@@ -101,7 +105,7 @@ final class SubtitleToolbarView: NSView {
             delegate?.subtitleToolbarViewDidRequestReset(self)
         }
 
-        let contentView = NSHostingView(rootView: SubtitleToolbarContentView(model: model))
+        let contentView = FirstMouseHostingView(rootView: SubtitleToolbarContentView(model: model))
         contentView.translatesAutoresizingMaskIntoConstraints = false
         contentView.setContentHuggingPriority(.required, for: .horizontal)
         contentView.setContentHuggingPriority(.required, for: .vertical)
@@ -114,6 +118,12 @@ final class SubtitleToolbarView: NSView {
             contentView.topAnchor.constraint(equalTo: topAnchor),
             contentView.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
+    }
+}
+
+private final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
     }
 }
 
