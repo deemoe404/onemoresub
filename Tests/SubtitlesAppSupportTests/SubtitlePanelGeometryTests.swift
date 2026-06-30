@@ -82,6 +82,42 @@ final class SubtitlePanelGeometryTests: XCTestCase {
         )
     }
 
+    func testHorizontalResizeEdgeThicknessBoundaries() {
+        let container = CGRect(x: 12, y: 12, width: 876, height: 136)
+        let edge = SubtitlePanelGeometry.resizeEdgeThickness
+
+        XCTAssertEqual(
+            SubtitlePanelGeometry.resizeEdges(
+                at: CGPoint(x: container.minX + edge, y: container.midY),
+                in: container,
+                isChromeVisible: true
+            ),
+            .left
+        )
+        XCTAssertNil(
+            SubtitlePanelGeometry.resizeEdges(
+                at: CGPoint(x: container.minX + edge + 0.5, y: container.midY),
+                in: container,
+                isChromeVisible: true
+            )
+        )
+        XCTAssertEqual(
+            SubtitlePanelGeometry.resizeEdges(
+                at: CGPoint(x: container.maxX - edge, y: container.midY),
+                in: container,
+                isChromeVisible: true
+            ),
+            .right
+        )
+        XCTAssertNil(
+            SubtitlePanelGeometry.resizeEdges(
+                at: CGPoint(x: container.maxX - edge - 0.5, y: container.midY),
+                in: container,
+                isChromeVisible: true
+            )
+        )
+    }
+
     func testLeftResizeKeepsRightEdgeStable() {
         let initial = CGRect(x: 200, y: 100, width: 800, height: 150)
 

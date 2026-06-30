@@ -7,7 +7,8 @@ The MVP flow is:
 1. Load an `.srt` or `.vtt` file from the menu bar app.
 2. Play a movie in TV.app, or seek another video player to the beginning.
 3. Let Apple TV sync follow TV.app automatically, or press Space when you start a non-TV player.
-4. Adjust subtitle offset or size from the floating subtitle window.
+4. Adjust subtitle offset from the floating toolbar, or resize subtitle width by
+   dragging the marked left or right edge of the subtitle container.
 
 ## Requirements
 
@@ -39,8 +40,12 @@ mise exec -- swift run SubtitleHarness at Fixtures/sample.srt 3.1 --offset 0.3
 - The menu bar item is labeled `Sub`.
 - The floating subtitle window stays above normal windows and attempts to join fullscreen Spaces.
 - Drag `.srt`, `.vtt`, or `.webvtt` files onto the subtitle window to replace the active subtitle.
-- Hover over the subtitle window to reveal controls for font size, window size, offset, playback, reset, and close.
-- The close control hides the subtitle window; reopen it from the menu bar.
+- Hover over the subtitle window to reveal the Liquid Glass toolbar and the
+  subtitle container chrome.
+- Drag the marked left or right edge region of the subtitle container to adjust
+  subtitle width. Height is calculated from the current subtitle text and system
+  caption style.
+- Hide or reopen the subtitle window from the menu bar.
 - Use the hover control `Calibrate TV` to manually read the current Apple TV playback position. After calibration, subtitles continue from that TV time using the local clock.
 - If TV.app is not running, missing Accessibility permission, or missing position data, the app falls back to the manual Space-key clock.
 
@@ -51,3 +56,8 @@ The app installs a global Space-key monitor and can read TV.app playback control
 ## Scope
 
 The MVP supports SRT and WebVTT only. ASS/SSA styling, OCR, sandboxing, signing, and auto-update are intentionally out of scope for this scaffold.
+
+## Known Limitations
+
+See [docs/known-limitations.md](docs/known-limitations.md) for interaction
+limitations that are intentionally handled with product-level workarounds.

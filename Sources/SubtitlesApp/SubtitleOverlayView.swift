@@ -461,14 +461,48 @@ final class SubtitleOverlayView: NSView {
 private struct SubtitleContainerChromeContentView: View {
     var body: some View {
         GlassEffectContainer {
-            Color.clear
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .glassEffect(
-                    .regular.interactive(),
-                    in: RoundedRectangle(cornerRadius: 22, style: .continuous)
-                )
+            ZStack {
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .glassEffect(
+                        .regular.interactive(),
+                        in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    )
+
+                HStack {
+                    SubtitleResizeHandleCue()
+                    Spacer(minLength: 0)
+                    SubtitleResizeHandleCue()
+                }
+                .allowsHitTesting(false)
+            }
         }
         .environment(\.controlActiveState, .active)
+    }
+}
+
+private struct SubtitleResizeHandleCue: View {
+    var body: some View {
+        ZStack {
+            Capsule()
+                .fill(.secondary.opacity(0.18))
+                .frame(width: 5)
+                .padding(.vertical, 16)
+
+            VStack(spacing: 7) {
+                Capsule()
+                    .frame(width: 3, height: 18)
+                Capsule()
+                    .frame(width: 3, height: 18)
+                Capsule()
+                    .frame(width: 3, height: 18)
+            }
+            .foregroundStyle(.secondary.opacity(0.64))
+        }
+        .frame(width: 28)
+        .frame(maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .accessibilityHidden(true)
     }
 }
 
