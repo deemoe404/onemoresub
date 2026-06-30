@@ -8,28 +8,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
     private let clock = SubtitlePlayerClock()
     private let panelController = SubtitlePanelController()
     private let appleTVClient = AppleTVPlaybackClient()
-    private let appleTVPollInterval: TimeInterval = 0.4
 
     private var statusItem: NSStatusItem?
     private var showHideMenuItem: NSMenuItem?
     private var playPauseMenuItem: NSMenuItem?
     private var offsetMenuItem: NSMenuItem?
     private var loadedFileMenuItem: NSMenuItem?
-    private var syncWithAppleTVMenuItem: NSMenuItem?
-    private var syncStatusMenuItem: NSMenuItem?
 
     private var document: SubtitleDocument?
     private var timeline: SubtitleTimeline?
     private var renderTimer: Timer?
     private var globalKeyMonitor: Any?
     private var localKeyMonitor: Any?
-    private var cachedAppleTVSnapshot: Result<AppleTVPlaybackSnapshot, AppleTVPlaybackError>?
-    private var lastAppleTVPollUptime: TimeInterval = 0
     private lazy var syncCoordinator = PlaybackSyncCoordinator(
-        mode: .appleTV,
-        appleTVSnapshotProvider: { [weak self] in
-            self?.appleTVSnapshotForSync() ?? .failure(.notRunning)
-        },
         manualTimeProvider: { [weak self] in
             self?.clock.currentMediaTime() ?? 0
         },
@@ -41,8 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
         mediaTime: 0,
         effectiveTime: 0,
         isPlaying: false,
-        sourceLabel: "Manual",
-        mode: .manual
+        sourceLabel: "Manual"
     )
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -96,16 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
         menu.addItem(NSMenuItem(title: "Reset Offset", action: #selector(resetOffsetFromMenu), keyEquivalent: "0"))
         menu.addItem(.separator())
 
-        let syncWithAppleTV = NSMenuItem(title: "Sync with Apple TV", action: #selector(toggleAppleTVSync), keyEquivalent: "t")
-        syncWithAppleTVMenuItem = syncWithAppleTV
-        menu.addItem(syncWithAppleTV)
-
-        syncStatusMenuItem = NSMenuItem(title: "Sync: Manual", action: nil, keyEquivalent: "")
-        syncStatusMenuItem?.isEnabled = false
-        menu.addItem(syncStatusMenuItem!)
-
         menu.addItem(NSMenuItem(title: "Request Accessibility Permission", action: #selector(requestAccessibilityPermission), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Request TV Automation Permission", action: #selector(requestTVAutomationPermission), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Subtitles", action: #selector(quit), keyEquivalent: "q"))
 
@@ -196,35 +177,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
         refreshSubtitleText()
     }
 
-    @objc private func toggleAppleTVSync() {
-        syncCoordinator.mode = syncCoordinator.mode == .appleTV ? .manual : .appleTV
-        cachedAppleTVSnapshot = nil
-        updateMenuState()
-        refreshSubtitleText()
-    }
-
     @objc private func requestAccessibilityPermission() {
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)
-    }
-
-    @objc private func requestTVAutomationPermission() {
-        let result = appleTVClient.requestAutomationPermission()
-        let alert = NSAlert()
-        switch result {
-        case .success:
-            alert.alertStyle = .informational
-            alert.messageText = "TV Automation Permission Ready"
-            alert.informativeText = "Subtitles can request playback state from TV.app."
-        case let .failure(error):
-            alert.alertStyle = .warning
-            alert.messageText = "TV Automation Permission Needed"
-            alert.informativeText = error.localizedDescription
-        }
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
-        cachedAppleTVSnapshot = nil
-        refreshSubtitleText()
     }
 
     @objc private func quit() {
@@ -308,18 +263,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
         refreshSubtitleText()
     }
 
-    private func appleTVSnapshotForSync() -> Result<AppleTVPlaybackSnapshot, AppleTVPlaybackError> {
-        let now = ProcessInfo.processInfo.systemUptime
-        if let cachedAppleTVSnapshot, now - lastAppleTVPollUptime < appleTVPollInterval {
-            return cachedAppleTVSnapshot
-        }
-
-        let snapshot = appleTVClient.snapshot()
-        cachedAppleTVSnapshot = snapshot
-        lastAppleTVPollUptime = now
-        return snapshot
-    }
-
     private func refreshSubtitleText() {
         let renderState = syncCoordinator.renderState(offset: clock.offset)
         lastRenderState = renderState
@@ -356,8 +299,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
         playPauseMenuItem?.title = lastRenderState.isPlaying ? "Pause" : "Play"
         offsetMenuItem?.title = String(format: "Offset: %.1fs", clock.offset)
         loadedFileMenuItem?.title = document?.sourceURL?.lastPathComponent ?? "No Subtitle Loaded"
-        syncWithAppleTVMenuItem?.state = syncCoordinator.mode == .appleTV ? .on : .off
-        syncStatusMenuItem?.title = "Sync: \(lastRenderState.sourceLabel)"
     }
 
     func subtitlePanelDidRequestPlayPause(_ panelController: SubtitlePanelController) {
@@ -375,10 +316,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
     func subtitlePanelDidRequestAppleTVCalibration(_ panelController: SubtitlePanelController) {
         switch appleTVClient.calibratedSnapshot() {
         case let .success(snapshot):
-            syncCoordinator.mode = .appleTV
             syncCoordinator.calibrate(with: snapshot)
-            cachedAppleTVSnapshot = .success(snapshot)
-            lastAppleTVPollUptime = ProcessInfo.processInfo.systemUptime
             refreshSubtitleText()
 
         case let .failure(error):

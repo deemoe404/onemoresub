@@ -41,17 +41,12 @@ mise exec -- swift run SubtitleHarness at Fixtures/sample.srt 3.1 --offset 0.3
 - Drag `.srt`, `.vtt`, or `.webvtt` files onto the subtitle window to replace the active subtitle.
 - Hover over the subtitle window to reveal controls for font size, window size, offset, playback, reset, and close.
 - The close control hides the subtitle window; reopen it from the menu bar.
-- `Sync with Apple TV` is enabled by default. When TV.app is running and returns a playback position, subtitles follow TV.app play/pause/seek state.
-- If TV.app is stopped, not running, missing permissions, or missing position data, the app falls back to the manual Space-key clock.
-- Use the hover control `Calibrate TV` to manually read the current Apple TV playback position when TV.app hides its playback controls. Automatic polling will not wake those controls.
+- Use the hover control `Calibrate TV` to manually read the current Apple TV playback position. After calibration, subtitles continue from that TV time using the local clock.
+- If TV.app is not running, missing Accessibility permission, or missing position data, the app falls back to the manual Space-key clock.
 
 ## Hotkey Permission
 
 The app installs a global Space-key monitor and can read TV.app playback controls for manual calibration. macOS may require Accessibility permission for both behaviors. If Space does not control subtitles or `Calibrate TV` cannot read TV.app, use the menu item `Request Accessibility Permission`, then enable the app in System Settings. The menu and hover controls remain usable without that permission.
-
-## TV Automation Permission
-
-Apple TV sync uses Apple Events to read `player position` and `player state` from TV.app. Launch the bundled app with `mise exec -- scripts/run.sh`, then use `Request TV Automation Permission` if macOS has not prompted yet. If permission is denied, subtitles keep working in manual mode.
 
 ## Scope
 

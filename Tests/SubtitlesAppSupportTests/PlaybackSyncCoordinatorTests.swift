@@ -5,70 +5,63 @@ final class PlaybackSyncCoordinatorTests: XCTestCase {
     func testAppleTVSnapshotOverridesManualClock() {
         let observedAt = Date(timeIntervalSince1970: 100)
         let coordinator = PlaybackSyncCoordinator(
-            mode: .appleTV,
-            appleTVSnapshotProvider: {
-                .success(AppleTVPlaybackSnapshot(
-                    state: .playing,
-                    position: 12,
-                    duration: 100,
-                    observedAt: observedAt
-                ))
-            },
             manualTimeProvider: { 3 },
             manualIsPlayingProvider: { false },
             dateProvider: { observedAt }
         )
+
+        coordinator.calibrate(with: AppleTVPlaybackSnapshot(
+            state: .playing,
+            position: 12,
+            duration: 100,
+            observedAt: observedAt
+        ))
 
         let state = coordinator.renderState(offset: 0.5)
 
         XCTAssertEqual(state.mediaTime, 12)
         XCTAssertEqual(state.effectiveTime, 12.5)
         XCTAssertTrue(state.isPlaying)
-        XCTAssertEqual(state.sourceLabel, "TV playing")
-        XCTAssertEqual(state.mode, .appleTV)
+        XCTAssertEqual(state.sourceLabel, "TV calibrated")
     }
 
     func testPausedAppleTVSnapshotKeepsPositionButMarksNotPlaying() {
         let observedAt = Date(timeIntervalSince1970: 100)
         let coordinator = PlaybackSyncCoordinator(
-            mode: .appleTV,
-            appleTVSnapshotProvider: {
-                .success(AppleTVPlaybackSnapshot(
-                    state: .paused,
-                    position: 40,
-                    duration: 100,
-                    observedAt: observedAt
-                ))
-            },
             manualTimeProvider: { 3 },
             manualIsPlayingProvider: { true },
             dateProvider: { observedAt.addingTimeInterval(10) }
         )
+
+        coordinator.calibrate(with: AppleTVPlaybackSnapshot(
+            state: .paused,
+            position: 40,
+            duration: 100,
+            observedAt: observedAt
+        ))
 
         let state = coordinator.renderState(offset: -1)
 
         XCTAssertEqual(state.mediaTime, 40)
         XCTAssertEqual(state.effectiveTime, 39)
         XCTAssertFalse(state.isPlaying)
-        XCTAssertEqual(state.sourceLabel, "TV paused")
+        XCTAssertEqual(state.sourceLabel, "TV calibrated")
     }
 
     func testPlayingAppleTVSnapshotAdvancesFromObservationTime() {
         let observedAt = Date(timeIntervalSince1970: 100)
         let coordinator = PlaybackSyncCoordinator(
-            mode: .appleTV,
-            appleTVSnapshotProvider: {
-                .success(AppleTVPlaybackSnapshot(
-                    state: .playing,
-                    position: 10,
-                    duration: 20,
-                    observedAt: observedAt
-                ))
-            },
             manualTimeProvider: { 0 },
             manualIsPlayingProvider: { false },
             dateProvider: { observedAt.addingTimeInterval(2.5) }
         )
+
+        coordinator.calibrate(with: AppleTVPlaybackSnapshot(
+            state: .playing,
+            position: 10,
+            duration: 20,
+            observedAt: observedAt
+        ))
 
         let state = coordinator.renderState(offset: 0)
 
@@ -76,10 +69,8 @@ final class PlaybackSyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(state.effectiveTime, 12.5)
     }
 
-    func testFallbacksToManualWhenTVIsNotRunning() {
+    func testUsesManualClockBeforeCalibration() {
         let coordinator = PlaybackSyncCoordinator(
-            mode: .appleTV,
-            appleTVSnapshotProvider: { .failure(.notRunning) },
             manualTimeProvider: { 9 },
             manualIsPlayingProvider: { true }
         )
@@ -90,24 +81,16 @@ final class PlaybackSyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(state.effectiveTime, 9.25)
         XCTAssertTrue(state.isPlaying)
         XCTAssertEqual(state.sourceLabel, "Manual")
-        XCTAssertEqual(state.mode, .manual)
     }
 
-    func testManualModeDoesNotPollAppleTV() {
-        var didPollAppleTV = false
+    func testManualClockCanBePausedBeforeCalibration() {
         let coordinator = PlaybackSyncCoordinator(
-            mode: .manual,
-            appleTVSnapshotProvider: {
-                didPollAppleTV = true
-                return .failure(.scriptError("should not poll"))
-            },
             manualTimeProvider: { 5 },
             manualIsPlayingProvider: { false }
         )
 
         let state = coordinator.renderState(offset: 2)
 
-        XCTAssertFalse(didPollAppleTV)
         XCTAssertEqual(state.mediaTime, 5)
         XCTAssertEqual(state.effectiveTime, 7)
         XCTAssertFalse(state.isPlaying)
@@ -117,8 +100,6 @@ final class PlaybackSyncCoordinatorTests: XCTestCase {
     func testCalibrationSnapshotCarriesAppleTVSyncWhenPollingFails() {
         let observedAt = Date(timeIntervalSince1970: 100)
         let coordinator = PlaybackSyncCoordinator(
-            mode: .appleTV,
-            appleTVSnapshotProvider: { .failure(.missingPosition) },
             manualTimeProvider: { 1 },
             manualIsPlayingProvider: { false },
             dateProvider: { observedAt.addingTimeInterval(4) }
@@ -137,6 +118,5 @@ final class PlaybackSyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(state.effectiveTime, 24.5)
         XCTAssertTrue(state.isPlaying)
         XCTAssertEqual(state.sourceLabel, "TV calibrated")
-        XCTAssertEqual(state.mode, .appleTV)
     }
 }
