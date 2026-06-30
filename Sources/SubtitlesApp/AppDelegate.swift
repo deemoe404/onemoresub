@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
     ].compactMap(URL.init(string:))
     private static let minimumRenderDelay: TimeInterval = 0.01
     private static let boundaryEpsilon: TimeInterval = 0.001
+    private static let playbackDisplayInterval: TimeInterval = 0.1
 
     private struct PanelPlaybackDisplayState: Equatable {
         let isPlaying: Bool
@@ -41,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
     private var document: SubtitleDocument?
     private var timeline: SubtitleTimeline?
     private var renderTimer: Timer?
+    private var playbackDisplayTimer: Timer?
     private var lastSubtitleText: String?
     private var lastPanelPlaybackDisplayState: PanelPlaybackDisplayState?
     private var lastMenuDisplayState: MenuDisplayState?
@@ -68,6 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
 
     func applicationWillTerminate(_ notification: Notification) {
         stopRenderTimer()
+        stopPlaybackDisplayTimer()
     }
 
     private func setupStatusItem() {
@@ -117,6 +120,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
         renderTimer = nil
     }
 
+    private func stopPlaybackDisplayTimer() {
+        playbackDisplayTimer?.invalidate()
+        playbackDisplayTimer = nil
+    }
+
     private func scheduleRenderTimerIfNeeded(
         renderState: PlaybackRenderState,
         timeline: SubtitleTimeline?
@@ -149,9 +157,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
         renderTimer = timer
     }
 
+    private func schedulePlaybackDisplayTimerIfNeeded(renderState: PlaybackRenderState) {
+        stopPlaybackDisplayTimer()
+
+        guard renderState.isPlaying, timeline != nil else {
+            return
+        }
+
+        let timer = Timer(
+            timeInterval: Self.playbackDisplayInterval,
+            target: self,
+            selector: #selector(playbackDisplayTimerDidFire),
+            userInfo: nil,
+            repeats: false
+        )
+        timer.tolerance = 0.02
+        RunLoop.main.add(timer, forMode: .common)
+        playbackDisplayTimer = timer
+    }
+
     @objc private func renderTimerDidFire() {
         renderTimer = nil
         refreshSubtitleText()
+    }
+
+    @objc private func playbackDisplayTimerDidFire() {
+        playbackDisplayTimer = nil
+        let renderState = syncCoordinator.renderState(offset: clock.offset)
+        lastRenderState = renderState
+        updatePanelPlaybackStateIfNeeded(renderState)
+        updateMenuState()
+        schedulePlaybackDisplayTimerIfNeeded(renderState: renderState)
     }
 
     @objc private func loadSubtitleFromMenu() {
@@ -266,6 +302,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
     private func togglePlayback(resetIfAtStart: Bool) {
         guard timeline != nil else {
             stopRenderTimer()
+            stopPlaybackDisplayTimer()
             updateSubtitleTextIfNeeded("Drop SRT or VTT subtitle here")
             return
         }
@@ -273,6 +310,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
         if clock.isPlaying {
             clock.pause()
             stopRenderTimer()
+            stopPlaybackDisplayTimer()
         } else {
             clock.play(resetToStart: resetIfAtStart)
         }
@@ -281,6 +319,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
 
     private func resetPlayback() {
         stopRenderTimer()
+        stopPlaybackDisplayTimer()
         clock.reset()
         clock.pause()
         syncCoordinator.markManual()
@@ -314,6 +353,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
             updatePanelPlaybackStateIfNeeded(renderState)
             updateMenuState()
             scheduleRenderTimerIfNeeded(renderState: renderState, timeline: nil)
+            schedulePlaybackDisplayTimerIfNeeded(renderState: renderState)
             return
         }
 
@@ -326,6 +366,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
         updatePanelPlaybackStateIfNeeded(renderState)
         updateMenuState()
         scheduleRenderTimerIfNeeded(renderState: renderState, timeline: timeline)
+        schedulePlaybackDisplayTimerIfNeeded(renderState: renderState)
     }
 
     private func updateSubtitleTextIfNeeded(_ text: String) {
