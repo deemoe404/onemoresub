@@ -26,6 +26,9 @@ final class SubtitleOverlayView: NSView {
 
     var subtitleText: String = placeholderText {
         didSet {
+            guard subtitleText != oldValue else {
+                return
+            }
             updateSubtitleText()
         }
     }

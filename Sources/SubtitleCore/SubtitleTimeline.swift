@@ -28,4 +28,16 @@ public struct SubtitleTimeline: Sendable {
             cue.startTime > effectiveTime
         }
     }
+
+    public func nextBoundary(after mediaTime: TimeInterval, offset: TimeInterval = 0) -> TimeInterval? {
+        let effectiveTime = max(0, mediaTime + offset)
+        let nextEffectiveBoundary = cues.reduce(nil as TimeInterval?) { candidate, cue in
+            let boundaries = [cue.startTime, cue.endTime].filter { $0 > effectiveTime }
+            guard let cueBoundary = boundaries.min() else {
+                return candidate
+            }
+            return min(candidate ?? cueBoundary, cueBoundary)
+        }
+        return nextEffectiveBoundary.map { max(0, $0 - offset) }
+    }
 }

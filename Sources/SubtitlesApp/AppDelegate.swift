@@ -11,6 +11,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
         "x-apple.systempreferences:com.apple.Accessibility-Settings.extension",
         "x-apple.systempreferences:com.apple.preference.universalaccess"
     ].compactMap(URL.init(string:))
+    private static let minimumRenderDelay: TimeInterval = 0.01
+    private static let boundaryEpsilon: TimeInterval = 0.001
+
+    private struct PanelPlaybackDisplayState: Equatable {
+        let isPlaying: Bool
+        let time: TimeInterval
+        let offset: TimeInterval
+        let sourceLabel: String
+    }
+
+    private struct MenuDisplayState: Equatable {
+        let showHideTitle: String
+        let playPauseTitle: String
+        let offsetTitle: String
+        let loadedFileTitle: String
+    }
 
     private let clock = SubtitlePlayerClock()
     private let panelController = SubtitlePanelController()
@@ -25,6 +41,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
     private var document: SubtitleDocument?
     private var timeline: SubtitleTimeline?
     private var renderTimer: Timer?
+    private var lastSubtitleText: String?
+    private var lastPanelPlaybackDisplayState: PanelPlaybackDisplayState?
+    private var lastMenuDisplayState: MenuDisplayState?
     private lazy var syncCoordinator = PlaybackSyncCoordinator(
         manualTimeProvider: { [weak self] in
             self?.clock.currentMediaTime() ?? 0
@@ -43,13 +62,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
     func applicationDidFinishLaunching(_ notification: Notification) {
         panelController.delegate = self
         setupStatusItem()
-        startRenderTimer()
         panelController.show()
         refreshSubtitleText()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        renderTimer?.invalidate()
+        stopRenderTimer()
     }
 
     private func setupStatusItem() {
@@ -94,18 +112,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
         updateMenuState()
     }
 
-    private func startRenderTimer() {
-        renderTimer = Timer.scheduledTimer(
-            timeInterval: 0.08,
+    private func stopRenderTimer() {
+        renderTimer?.invalidate()
+        renderTimer = nil
+    }
+
+    private func scheduleRenderTimerIfNeeded(
+        renderState: PlaybackRenderState,
+        timeline: SubtitleTimeline?
+    ) {
+        stopRenderTimer()
+
+        guard renderState.isPlaying,
+              let timeline,
+              let nextBoundary = timeline.nextBoundary(after: renderState.mediaTime, offset: clock.offset) else {
+            return
+        }
+
+        let intervalUntilBoundary = nextBoundary - renderState.mediaTime
+        guard intervalUntilBoundary.isFinite, intervalUntilBoundary > 0 else {
+            return
+        }
+
+        let interval = intervalUntilBoundary <= Self.boundaryEpsilon
+            ? Self.minimumRenderDelay
+            : max(Self.minimumRenderDelay, intervalUntilBoundary)
+        let timer = Timer(
+            timeInterval: interval,
             target: self,
             selector: #selector(renderTimerDidFire),
             userInfo: nil,
-            repeats: true
+            repeats: false
         )
-        renderTimer?.tolerance = 0.02
+        timer.tolerance = min(0.05, interval * 0.1)
+        RunLoop.main.add(timer, forMode: .common)
+        renderTimer = timer
     }
 
     @objc private func renderTimerDidFire() {
+        renderTimer = nil
         refreshSubtitleText()
     }
 
@@ -177,7 +222,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
 
     @objc private func resetOffsetFromMenu() {
         clock.setOffset(0)
-        updateMenuState()
         refreshSubtitleText()
     }
 
@@ -204,7 +248,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
             syncCoordinator.markManual()
             panelController.show()
             panelController.setLoadedFileName(url.lastPathComponent)
-            updateMenuState()
             refreshSubtitleText()
         } catch {
             presentLoadError(error, url: url)
@@ -222,30 +265,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
 
     private func togglePlayback(resetIfAtStart: Bool) {
         guard timeline != nil else {
-            panelController.showMessage("Drop SRT or VTT subtitle here")
+            stopRenderTimer()
+            updateSubtitleTextIfNeeded("Drop SRT or VTT subtitle here")
             return
         }
 
         if clock.isPlaying {
             clock.pause()
+            stopRenderTimer()
         } else {
             clock.play(resetToStart: resetIfAtStart)
         }
-        updateMenuState()
         refreshSubtitleText()
     }
 
     private func resetPlayback() {
+        stopRenderTimer()
         clock.reset()
         clock.pause()
         syncCoordinator.markManual()
-        updateMenuState()
         refreshSubtitleText()
     }
 
     private func adjustOffset(by delta: TimeInterval) {
         clock.adjustOffset(by: delta)
-        updateMenuState()
         refreshSubtitleText()
     }
 
@@ -267,14 +310,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
         lastRenderState = renderState
 
         guard let timeline else {
-            panelController.showMessage("Drop SRT or VTT subtitle here")
-            panelController.setPlaybackState(
-                isPlaying: renderState.isPlaying,
-                time: renderState.mediaTime,
-                offset: clock.offset,
-                sourceLabel: renderState.sourceLabel
-            )
+            updateSubtitleTextIfNeeded("Drop SRT or VTT subtitle here")
+            updatePanelPlaybackStateIfNeeded(renderState)
             updateMenuState()
+            scheduleRenderTimerIfNeeded(renderState: renderState, timeline: nil)
             return
         }
 
@@ -283,21 +322,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
             .map(\.text)
             .joined(separator: "\n\n")
 
-        panelController.showMessage(activeText)
+        updateSubtitleTextIfNeeded(activeText)
+        updatePanelPlaybackStateIfNeeded(renderState)
+        updateMenuState()
+        scheduleRenderTimerIfNeeded(renderState: renderState, timeline: timeline)
+    }
+
+    private func updateSubtitleTextIfNeeded(_ text: String) {
+        guard text != lastSubtitleText else {
+            return
+        }
+        lastSubtitleText = text
+        panelController.showMessage(text)
+    }
+
+    private func updatePanelPlaybackStateIfNeeded(_ renderState: PlaybackRenderState) {
+        let displayState = PanelPlaybackDisplayState(
+            isPlaying: renderState.isPlaying,
+            time: renderState.mediaTime,
+            offset: clock.offset,
+            sourceLabel: renderState.sourceLabel
+        )
+        guard displayState != lastPanelPlaybackDisplayState else {
+            return
+        }
+        lastPanelPlaybackDisplayState = displayState
         panelController.setPlaybackState(
             isPlaying: renderState.isPlaying,
             time: renderState.mediaTime,
             offset: clock.offset,
             sourceLabel: renderState.sourceLabel
         )
-        updateMenuState()
     }
 
     private func updateMenuState() {
-        showHideMenuItem?.title = panelController.isVisible ? "Hide Subtitle Window" : "Show Subtitle Window"
-        playPauseMenuItem?.title = lastRenderState.isPlaying ? "Pause" : "Play"
-        offsetMenuItem?.title = String(format: "Offset: %.1fs", clock.offset)
-        loadedFileMenuItem?.title = document?.sourceURL?.lastPathComponent ?? "No Subtitle Loaded"
+        let state = MenuDisplayState(
+            showHideTitle: panelController.isVisible ? "Hide Subtitle Window" : "Show Subtitle Window",
+            playPauseTitle: lastRenderState.isPlaying ? "Pause" : "Play",
+            offsetTitle: String(format: "Offset: %.1fs", clock.offset),
+            loadedFileTitle: document?.sourceURL?.lastPathComponent ?? "No Subtitle Loaded"
+        )
+        guard state != lastMenuDisplayState else {
+            return
+        }
+        lastMenuDisplayState = state
+        showHideMenuItem?.title = state.showHideTitle
+        playPauseMenuItem?.title = state.playPauseTitle
+        offsetMenuItem?.title = state.offsetTitle
+        loadedFileMenuItem?.title = state.loadedFileTitle
     }
 
     func subtitlePanelDidRequestPlayPause(_ panelController: SubtitlePanelController) {
