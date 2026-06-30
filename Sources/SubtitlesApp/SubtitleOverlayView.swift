@@ -72,7 +72,7 @@ final class SubtitleOverlayView: NSView {
     override func resetCursorRects() {
         super.resetCursorRects()
 
-        guard isContainerChromeVisible, !isInteractionTrackingSuspended else {
+        guard !isInteractionTrackingSuspended else {
             return
         }
 
@@ -85,7 +85,7 @@ final class SubtitleOverlayView: NSView {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard isInteractivePoint(point) else {
+        guard isInteractivePoint(point) || resizeEdges(at: point) != nil else {
             return nil
         }
 
@@ -98,7 +98,7 @@ final class SubtitleOverlayView: NSView {
         }
 
         let point = convert(event.locationInWindow, from: nil)
-        return isInteractivePoint(point)
+        return isInteractivePoint(point) || resizeEdges(at: point) != nil
     }
 
     override func mouseEntered(with event: NSEvent) {
@@ -324,11 +324,15 @@ final class SubtitleOverlayView: NSView {
     }
 
     private func resizeEdges(at point: NSPoint) -> SubtitlePanelGeometry.ResizeEdges? {
-        SubtitlePanelGeometry.resizeEdges(
-            at: point,
-            in: containerRect(),
-            isChromeVisible: isContainerChromeVisible
-        )
+        if isContainerChromeVisible {
+            return SubtitlePanelGeometry.resizeEdges(
+                at: point,
+                in: containerRect(),
+                isChromeVisible: true
+            )
+        }
+
+        return SubtitlePanelGeometry.resizeEdges(at: point, in: containerRect())
     }
 
     private func containerRect() -> NSRect {

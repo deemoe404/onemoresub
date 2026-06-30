@@ -30,7 +30,17 @@ public enum SubtitlePanelGeometry {
         in containerRect: CGRect,
         isChromeVisible: Bool
     ) -> ResizeEdges? {
-        guard isChromeVisible, containerRect.containsInclusively(point) else {
+        guard isChromeVisible else {
+            return nil
+        }
+        return resizeEdges(at: point, in: containerRect)
+    }
+
+    public static func resizeEdges(
+        at point: CGPoint,
+        in containerRect: CGRect
+    ) -> ResizeEdges? {
+        guard containerRect.containsInclusively(point) else {
             return nil
         }
 

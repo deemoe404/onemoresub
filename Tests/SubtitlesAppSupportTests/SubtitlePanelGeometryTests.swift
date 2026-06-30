@@ -22,6 +22,18 @@ final class SubtitlePanelGeometryTests: XCTestCase {
         )
     }
 
+    func testEdgeHitTestCanRunWithoutChromeVisibilityGate() {
+        let container = CGRect(x: 12, y: 12, width: 876, height: 136)
+
+        XCTAssertEqual(
+            SubtitlePanelGeometry.resizeEdges(at: CGPoint(x: container.maxX - 2, y: container.midY), in: container),
+            .right
+        )
+        XCTAssertNil(
+            SubtitlePanelGeometry.resizeEdges(at: CGPoint(x: container.midX, y: container.midY), in: container)
+        )
+    }
+
     func testEdgeHitTestFindsCornersAndIgnoresInterior() {
         let container = CGRect(x: 12, y: 12, width: 876, height: 136)
 
