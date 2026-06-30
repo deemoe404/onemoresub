@@ -421,14 +421,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
         loadedFileMenuItem?.title = state.loadedFileTitle
     }
 
-    func subtitlePanelDidRequestPlayPause(_ panelController: SubtitlePanelController) {
-        togglePlayback(resetIfAtStart: false)
-    }
-
-    func subtitlePanelDidRequestReset(_ panelController: SubtitlePanelController) {
-        resetPlayback()
-    }
-
     func subtitlePanel(_ panelController: SubtitlePanelController, didAdjustOffsetBy delta: TimeInterval) {
         adjustOffset(by: delta)
     }

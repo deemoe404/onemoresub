@@ -3,8 +3,6 @@ import SubtitleCore
 import SubtitlesAppSupport
 
 protocol SubtitlePanelControllerDelegate: AnyObject {
-    func subtitlePanelDidRequestPlayPause(_ panelController: SubtitlePanelController)
-    func subtitlePanelDidRequestReset(_ panelController: SubtitlePanelController)
     func subtitlePanel(_ panelController: SubtitlePanelController, didAdjustOffsetBy delta: TimeInterval)
     func subtitlePanelDidRequestAppleTVCalibration(_ panelController: SubtitlePanelController)
     func subtitlePanel(_ panelController: SubtitlePanelController, didRequestLoadURL url: URL)
@@ -217,14 +215,6 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
 
     func subtitleToolbarViewDidRequestAppleTVCalibration(_ view: SubtitleToolbarView) {
         delegate?.subtitlePanelDidRequestAppleTVCalibration(self)
-    }
-
-    func subtitleToolbarViewDidRequestPlayPause(_ view: SubtitleToolbarView) {
-        delegate?.subtitlePanelDidRequestPlayPause(self)
-    }
-
-    func subtitleToolbarViewDidRequestReset(_ view: SubtitleToolbarView) {
-        delegate?.subtitlePanelDidRequestReset(self)
     }
 
     private func performContainerMove(with _: NSEvent) {

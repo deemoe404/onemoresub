@@ -7,8 +7,6 @@ protocol SubtitleToolbarViewDelegate: AnyObject {
     func subtitleToolbarViewDidExit(_ view: SubtitleToolbarView)
     func subtitleToolbarView(_ view: SubtitleToolbarView, didAdjustOffsetBy delta: TimeInterval)
     func subtitleToolbarViewDidRequestAppleTVCalibration(_ view: SubtitleToolbarView)
-    func subtitleToolbarViewDidRequestPlayPause(_ view: SubtitleToolbarView)
-    func subtitleToolbarViewDidRequestReset(_ view: SubtitleToolbarView)
 }
 
 final class SubtitleToolbarView: NSView {
@@ -20,7 +18,7 @@ final class SubtitleToolbarView: NSView {
 
     override var intrinsicContentSize: NSSize {
         guard let hostingView else {
-            return NSSize(width: 520, height: 38)
+            return NSSize(width: 280, height: 38)
         }
         return hostingView.fittingSize
     }
@@ -63,8 +61,7 @@ final class SubtitleToolbarView: NSView {
         delegate?.subtitleToolbarViewDidExit(self)
     }
 
-    func setPlaybackState(isPlaying: Bool, time: TimeInterval, offset: TimeInterval, sourceLabel: String) {
-        model.isPlaying = isPlaying
+    func setPlaybackState(isPlaying _: Bool, time: TimeInterval, offset: TimeInterval, sourceLabel: String) {
         model.playbackTime = time
         model.offset = offset
         model.sourceLabel = sourceLabel
@@ -92,18 +89,6 @@ final class SubtitleToolbarView: NSView {
             }
             delegate?.subtitleToolbarViewDidRequestAppleTVCalibration(self)
         }
-        model.requestPlayPause = { [weak self] in
-            guard let self else {
-                return
-            }
-            delegate?.subtitleToolbarViewDidRequestPlayPause(self)
-        }
-        model.requestReset = { [weak self] in
-            guard let self else {
-                return
-            }
-            delegate?.subtitleToolbarViewDidRequestReset(self)
-        }
 
         let contentView = FirstMouseHostingView(rootView: SubtitleToolbarContentView(model: model))
         contentView.translatesAutoresizingMaskIntoConstraints = false
@@ -128,7 +113,6 @@ private final class FirstMouseHostingView<Content: View>: NSHostingView<Content>
 }
 
 private final class SubtitleToolbarModel: ObservableObject {
-    @Published var isPlaying = false
     @Published var playbackTime: TimeInterval = 0
     @Published var offset: TimeInterval = 0
     @Published var sourceLabel = "Manual"
@@ -136,8 +120,6 @@ private final class SubtitleToolbarModel: ObservableObject {
 
     var adjustOffset: ((TimeInterval) -> Void)?
     var requestAppleTVCalibration: (() -> Void)?
-    var requestPlayPause: (() -> Void)?
-    var requestReset: (() -> Void)?
 
     var statusKind: SubtitleToolbarStatusKind {
         SubtitleToolbarStatusKind(sourceLabel: sourceLabel)
@@ -149,10 +131,6 @@ private final class SubtitleToolbarModel: ObservableObject {
 
     var offsetText: String {
         formatOffset(offset)
-    }
-
-    var playPauseTitle: String {
-        isPlaying ? "Pause" : "Play"
     }
 
     private func formatTime(_ time: TimeInterval) -> String {
@@ -218,6 +196,9 @@ private enum SubtitleToolbarStatusKind {
 }
 
 private struct SubtitleToolbarContentView: View {
+    private static let bubbleHeight: CGFloat = 44
+    private static let syncBubbleWidth: CGFloat = 76
+
     @ObservedObject var model: SubtitleToolbarModel
 
     var body: some View {
@@ -225,24 +206,55 @@ private struct SubtitleToolbarContentView: View {
             HStack(spacing: 10) {
                 statusView
                     .frame(maxWidth: 420, alignment: .leading)
-                    .layoutPriority(0)
+                    .frame(height: Self.bubbleHeight)
+                    .padding(.horizontal, 12)
+                    .glassEffect(.regular.interactive(), in: Capsule())
 
-                Divider()
-                    .frame(height: 24)
-
-                HStack(spacing: 6) {
-                    toolbarButton("Calibrate TV") { model.requestAppleTVCalibration?() }
-                    toolbarButton(model.playPauseTitle) { model.requestPlayPause?() }
-                    toolbarButton("Reset") { model.requestReset?() }
-                }
-                .layoutPriority(1)
+                syncControl
+                    .layoutPriority(1)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .glassEffect(.regular.interactive(), in: Capsule())
         }
         .fixedSize(horizontal: true, vertical: true)
         .environment(\.controlActiveState, .active)
+    }
+
+    private var syncControl: some View {
+        HStack(spacing: 0) {
+            Button {
+                model.requestAppleTVCalibration?()
+            } label: {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 14, weight: .semibold))
+                    .frame(width: 42, height: Self.bubbleHeight)
+            }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+            .help("Sync with Apple TV")
+            .accessibilityLabel(Text("Sync with Apple TV"))
+
+            Divider()
+                .frame(height: 22)
+
+            Menu {
+                Button {
+                    model.requestAppleTVCalibration?()
+                } label: {
+                    Label("Apple TV", systemImage: "appletv.fill")
+                }
+            } label: {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 32, height: Self.bubbleHeight)
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .contentShape(Rectangle())
+            .help("Choose sync target")
+            .accessibilityLabel(Text("Choose sync target"))
+        }
+        .frame(width: Self.syncBubbleWidth, height: Self.bubbleHeight)
+        .glassEffect(.regular.interactive(), in: Capsule())
     }
 
     private var statusView: some View {
@@ -288,12 +300,6 @@ private struct SubtitleToolbarContentView: View {
                     .frame(maxWidth: 220, alignment: .leading)
             }
         }
-    }
-
-    private func toolbarButton(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(title, action: action)
-            .buttonStyle(.glass)
-            .controlSize(.small)
     }
 
     private func stepperButton(systemName: String, help: String, action: @escaping () -> Void) -> some View {
