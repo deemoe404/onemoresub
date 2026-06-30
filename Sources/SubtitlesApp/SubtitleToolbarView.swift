@@ -156,10 +156,10 @@ private final class SubtitleToolbarModel: ObservableObject {
     }
 
     private func formatTime(_ time: TimeInterval) -> String {
-        let clamped = max(0, time)
-        let minutes = Int(clamped) / 60
-        let seconds = clamped.truncatingRemainder(dividingBy: 60)
-        return String(format: "%02d:%04.1f", minutes, seconds)
+        let totalSeconds = Int(max(0, time))
+        let minutes = totalSeconds / 60
+        let seconds = totalSeconds % 60
+        return String(format: "%02d:%02d", minutes, seconds)
     }
 
     private func formatOffset(_ offset: TimeInterval) -> String {

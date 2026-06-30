@@ -13,11 +13,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
     ].compactMap(URL.init(string:))
     private static let minimumRenderDelay: TimeInterval = 0.01
     private static let boundaryEpsilon: TimeInterval = 0.001
-    private static let playbackDisplayInterval: TimeInterval = 0.1
+    private static let minimumPlaybackDisplayDelay: TimeInterval = 0.01
 
     private struct PanelPlaybackDisplayState: Equatable {
         let isPlaying: Bool
-        let time: TimeInterval
+        let playbackSeconds: Int
         let offset: TimeInterval
         let sourceLabel: String
     }
@@ -165,15 +165,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
         }
 
         let timer = Timer(
-            timeInterval: Self.playbackDisplayInterval,
+            timeInterval: playbackDisplayDelay(after: renderState.mediaTime),
             target: self,
             selector: #selector(playbackDisplayTimerDidFire),
             userInfo: nil,
             repeats: false
         )
-        timer.tolerance = 0.02
+        timer.tolerance = min(0.1, timer.timeInterval * 0.1)
         RunLoop.main.add(timer, forMode: .common)
         playbackDisplayTimer = timer
+    }
+
+    private func playbackDisplayDelay(after mediaTime: TimeInterval) -> TimeInterval {
+        let clamped = max(0, mediaTime)
+        let fractional = clamped - floor(clamped)
+        let delay = fractional == 0 ? 1 : 1 - fractional
+        return max(Self.minimumPlaybackDisplayDelay, delay)
     }
 
     @objc private func renderTimerDidFire() {
@@ -378,9 +385,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
     }
 
     private func updatePanelPlaybackStateIfNeeded(_ renderState: PlaybackRenderState) {
+        let playbackSeconds = Int(max(0, renderState.mediaTime))
         let displayState = PanelPlaybackDisplayState(
             isPlaying: renderState.isPlaying,
-            time: renderState.mediaTime,
+            playbackSeconds: playbackSeconds,
             offset: clock.offset,
             sourceLabel: renderState.sourceLabel
         )
@@ -390,7 +398,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SubtitlePanelControlle
         lastPanelPlaybackDisplayState = displayState
         panelController.setPlaybackState(
             isPlaying: renderState.isPlaying,
-            time: renderState.mediaTime,
+            time: TimeInterval(playbackSeconds),
             offset: clock.offset,
             sourceLabel: renderState.sourceLabel
         )
