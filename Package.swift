@@ -33,7 +33,10 @@ let package = Package(
         .target(
             name: "SubtitlesAppSupport",
             dependencies: ["SubtitleCore"],
-            swiftSettings: swiftSettings
+            swiftSettings: swiftSettings,
+            linkerSettings: [
+                .linkedFramework("MediaAccessibility")
+            ]
         ),
         .executableTarget(
             name: "SubtitlesApp",

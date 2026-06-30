@@ -49,15 +49,17 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
         if !panel.isVisible {
             panel.setFrame(Self.defaultFrame(), display: false)
         }
+        overlayView.setCaptionReportingEnabled(true)
         panel.orderFrontRegardless()
     }
 
     func hide() {
+        overlayView.setCaptionReportingEnabled(false)
         panel.orderOut(nil)
     }
 
     func showMessage(_ message: String) {
-        overlayView.subtitleText = message.isEmpty ? " " : message
+        overlayView.subtitleText = message
     }
 
     func setPlaybackState(isPlaying: Bool, time: TimeInterval, offset: TimeInterval, sourceLabel: String = "Manual") {

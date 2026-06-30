@@ -1,4 +1,5 @@
 @preconcurrency import Cocoa
+import SubtitlesAppSupport
 
 protocol SubtitleOverlayViewDelegate: AnyObject {
     func subtitleOverlayViewDidRequestPlayPause(_ view: SubtitleOverlayView)
@@ -13,14 +14,13 @@ protocol SubtitleOverlayViewDelegate: AnyObject {
 final class SubtitleOverlayView: NSView {
     weak var delegate: SubtitleOverlayViewDelegate?
 
-    private static let visibleBackgroundColor = NSColor.black.withAlphaComponent(0.72).cgColor
-    private static let hiddenBackgroundColor = NSColor.clear.cgColor
+    private static let placeholderText = "Drop SRT or VTT subtitle here"
     private static let visibleBorderColor = NSColor.white.withAlphaComponent(0.16).cgColor
     private static let hiddenBorderColor = NSColor.clear.cgColor
 
-    var subtitleText: String = "Drop SRT or VTT subtitle here" {
+    var subtitleText: String = placeholderText {
         didSet {
-            subtitleLabel.stringValue = subtitleText
+            updateSubtitleText()
         }
     }
 
@@ -30,26 +30,31 @@ final class SubtitleOverlayView: NSView {
         }
     }
 
-    private let subtitleLabel = NSTextField(labelWithString: "Drop SRT or VTT subtitle here")
+    private let subtitleLabel = NSTextField(labelWithString: placeholderText)
     private let metadataLabel = NSTextField(labelWithString: "00:00.0  Offset +0.0s")
     private let controlsStack = NSStackView()
     private let playPauseButton = NSButton(title: "Play", target: nil, action: nil)
 
-    private var fontSize: CGFloat = 36
+    private var captionAppearance = SystemCaptionAppearance.current()
+    private var captionAppearanceMonitor: SystemCaptionAppearanceMonitor?
     private var playbackTime: TimeInterval = 0
     private var offset: TimeInterval = 0
     private var isPlaying = false
     private var sourceLabel = "Manual"
+    private var isReportingCaptions = true
+    private var lastReportedCaptionText: String?
     private var trackingAreaRef: NSTrackingArea?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         setupView()
+        startCaptionAppearanceMonitoring()
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         setupView()
+        startCaptionAppearanceMonitoring()
     }
 
     override func updateTrackingAreas() {
@@ -96,17 +101,20 @@ final class SubtitleOverlayView: NSView {
         updateMetadata()
     }
 
+    func setCaptionReportingEnabled(_ enabled: Bool) {
+        isReportingCaptions = enabled
+        reportDisplayedCaptions(force: true)
+    }
+
     private func setupView() {
         wantsLayer = true
-        layer?.backgroundColor = Self.hiddenBackgroundColor
-        layer?.cornerRadius = 8
+        layer?.backgroundColor = captionAppearance.windowColor.cgColor
+        layer?.cornerRadius = captionAppearance.windowCornerRadius
         layer?.borderWidth = 1
         layer?.borderColor = Self.hiddenBorderColor
         registerForDraggedTypes([.fileURL])
 
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        subtitleLabel.textColor = .white
-        subtitleLabel.font = .systemFont(ofSize: fontSize, weight: .semibold)
         subtitleLabel.alignment = .center
         subtitleLabel.maximumNumberOfLines = 3
         subtitleLabel.lineBreakMode = .byWordWrapping
@@ -126,8 +134,6 @@ final class SubtitleOverlayView: NSView {
         controlsStack.isHidden = true
 
         let controls = [
-            makeButton("A-", action: #selector(decreaseFontSize)),
-            makeButton("A+", action: #selector(increaseFontSize)),
             makeButton("W-", action: #selector(decreaseWindowSize)),
             makeButton("W+", action: #selector(increaseWindowSize)),
             makeButton("-0.5s", action: #selector(decreaseOffset)),
@@ -162,6 +168,8 @@ final class SubtitleOverlayView: NSView {
             controlsStack.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 12),
             controlsStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12)
         ])
+
+        updateSubtitleText()
     }
 
     private func makeButton(_ title: String, action: Selector) -> NSButton {
@@ -180,11 +188,50 @@ final class SubtitleOverlayView: NSView {
     private func setControlsVisible(_ visible: Bool) {
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.12
-            layer?.backgroundColor = visible ? Self.visibleBackgroundColor : Self.hiddenBackgroundColor
             layer?.borderColor = visible ? Self.visibleBorderColor : Self.hiddenBorderColor
             controlsStack.animator().isHidden = !visible
             metadataLabel.animator().alphaValue = visible ? 1 : 0
         }
+    }
+
+    private func startCaptionAppearanceMonitoring() {
+        captionAppearanceMonitor = SystemCaptionAppearanceMonitor { [weak self] in
+            self?.applyCaptionAppearance(SystemCaptionAppearance.current())
+        }
+    }
+
+    private func applyCaptionAppearance(_ appearance: SystemCaptionAppearance) {
+        captionAppearance = appearance
+        layer?.backgroundColor = appearance.windowColor.cgColor
+        layer?.cornerRadius = appearance.windowCornerRadius
+        updateSubtitleText()
+    }
+
+    private func updateSubtitleText() {
+        let displayText = subtitleText.isEmpty ? " " : subtitleText
+        subtitleLabel.attributedStringValue = NSAttributedString(
+            string: displayText,
+            attributes: captionAppearance.subtitleAttributes()
+        )
+        reportDisplayedCaptions()
+    }
+
+    private func reportDisplayedCaptions(force: Bool = false) {
+        let captionText = isReportingCaptions ? reportableCaptionText() : nil
+        guard force || captionText != lastReportedCaptionText else {
+            return
+        }
+
+        SystemCaptionDisplayReporter.report(displayedText: captionText)
+        lastReportedCaptionText = captionText
+    }
+
+    private func reportableCaptionText() -> String? {
+        let trimmed = subtitleText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, subtitleText != Self.placeholderText else {
+            return nil
+        }
+        return subtitleText
     }
 
     private func updateMetadata() {
@@ -209,16 +256,6 @@ final class SubtitleOverlayView: NSView {
         return urls?.first { url in
             ["srt", "vtt", "webvtt"].contains(url.pathExtension.lowercased())
         }
-    }
-
-    @objc private func decreaseFontSize() {
-        fontSize = max(18, fontSize - 2)
-        subtitleLabel.font = .systemFont(ofSize: fontSize, weight: .semibold)
-    }
-
-    @objc private func increaseFontSize() {
-        fontSize = min(72, fontSize + 2)
-        subtitleLabel.font = .systemFont(ofSize: fontSize, weight: .semibold)
     }
 
     @objc private func decreaseWindowSize() {
