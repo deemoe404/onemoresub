@@ -59,8 +59,8 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
         overlayView.subtitleText = message.isEmpty ? " " : message
     }
 
-    func setPlaybackState(isPlaying: Bool, time: TimeInterval, offset: TimeInterval) {
-        overlayView.setPlaybackState(isPlaying: isPlaying, time: time, offset: offset)
+    func setPlaybackState(isPlaying: Bool, time: TimeInterval, offset: TimeInterval, sourceLabel: String = "Manual") {
+        overlayView.setPlaybackState(isPlaying: isPlaying, time: time, offset: offset, sourceLabel: sourceLabel)
     }
 
     func setLoadedFileName(_ fileName: String) {

@@ -43,6 +43,8 @@ cat >"$CONTENTS_DIR/Info.plist" <<'PLIST'
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Subtitles reads playback position from TV.app so external subtitles can stay synchronized with Apple TV movies.</string>
 </dict>
 </plist>
 PLIST

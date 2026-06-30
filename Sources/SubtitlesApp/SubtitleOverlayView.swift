@@ -33,6 +33,7 @@ final class SubtitleOverlayView: NSView {
     private var playbackTime: TimeInterval = 0
     private var offset: TimeInterval = 0
     private var isPlaying = false
+    private var sourceLabel = "Manual"
     private var trackingAreaRef: NSTrackingArea?
 
     override init(frame frameRect: NSRect) {
@@ -80,10 +81,11 @@ final class SubtitleOverlayView: NSView {
         return true
     }
 
-    func setPlaybackState(isPlaying: Bool, time: TimeInterval, offset: TimeInterval) {
+    func setPlaybackState(isPlaying: Bool, time: TimeInterval, offset: TimeInterval, sourceLabel: String = "Manual") {
         self.isPlaying = isPlaying
         self.playbackTime = time
         self.offset = offset
+        self.sourceLabel = sourceLabel
         playPauseButton.title = isPlaying ? "Pause" : "Play"
         updateMetadata()
     }
@@ -177,7 +179,7 @@ final class SubtitleOverlayView: NSView {
 
     private func updateMetadata() {
         let file = loadedFileName.map { "  \($0)" } ?? ""
-        metadataLabel.stringValue = "\(formatTime(playbackTime))  Offset \(formatOffset(offset))\(file)"
+        metadataLabel.stringValue = "\(sourceLabel)  \(formatTime(playbackTime))  Offset \(formatOffset(offset))\(file)"
     }
 
     private func formatTime(_ time: TimeInterval) -> String {

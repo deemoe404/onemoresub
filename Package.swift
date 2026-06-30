@@ -30,9 +30,17 @@ let package = Package(
             name: "SubtitleCore",
             swiftSettings: swiftSettings
         ),
+        .target(
+            name: "SubtitlesAppSupport",
+            dependencies: ["SubtitleCore"],
+            swiftSettings: swiftSettings
+        ),
         .executableTarget(
             name: "SubtitlesApp",
-            dependencies: ["SubtitleCore"],
+            dependencies: [
+                "SubtitleCore",
+                "SubtitlesAppSupport"
+            ],
             swiftSettings: swiftSettings
         ),
         .executableTarget(
@@ -43,6 +51,11 @@ let package = Package(
         .testTarget(
             name: "SubtitleCoreTests",
             dependencies: ["SubtitleCore"],
+            swiftSettings: swiftSettings
+        ),
+        .testTarget(
+            name: "SubtitlesAppSupportTests",
+            dependencies: ["SubtitlesAppSupport"],
             swiftSettings: swiftSettings
         )
     ]

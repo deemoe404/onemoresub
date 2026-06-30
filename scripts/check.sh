@@ -13,4 +13,8 @@ grep -q "format=srt" /tmp/subtitles-harness-srt.txt
 grep -q "format=webVTT" /tmp/subtitles-harness-vtt.txt
 grep -q "Second cue." /tmp/subtitles-harness-at.txt
 
+APP_PATH="$(scripts/package-app.sh | tail -n 1)"
+plutil -lint "$APP_PATH/Contents/Info.plist"
+test -x "$APP_PATH/Contents/MacOS/Subtitles"
+
 echo "Subtitles checks passed."
