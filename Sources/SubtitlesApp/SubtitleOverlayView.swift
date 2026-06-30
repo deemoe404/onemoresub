@@ -33,6 +33,7 @@ final class SubtitleOverlayView: NSView {
     private let subtitleBackdropView = NSView()
     private let subtitleLabel = NSTextField(labelWithString: placeholderText)
     private let containerChromeView = NSHostingView(rootView: SubtitleContainerChromeContentView())
+    private let resizeHandleCueView = NSHostingView(rootView: SubtitleResizeHandlesContentView())
 
     private var captionAppearance = SystemCaptionAppearance.current()
     private var captionAppearanceMonitor: SystemCaptionAppearanceMonitor?
@@ -180,6 +181,7 @@ final class SubtitleOverlayView: NSView {
         NSAnimationContext.runAnimationGroup { context in
             context.duration = animated ? 0.12 : 0
             containerChromeView.animator().alphaValue = visible ? 1 : 0
+            resizeHandleCueView.animator().alphaValue = visible ? 1 : 0
         }
     }
 
@@ -195,6 +197,11 @@ final class SubtitleOverlayView: NSView {
         containerChromeView.wantsLayer = true
         containerChromeView.layer?.backgroundColor = NSColor.clear.cgColor
 
+        resizeHandleCueView.translatesAutoresizingMaskIntoConstraints = false
+        resizeHandleCueView.alphaValue = 0
+        resizeHandleCueView.wantsLayer = true
+        resizeHandleCueView.layer?.backgroundColor = NSColor.clear.cgColor
+
         subtitleBackdropView.translatesAutoresizingMaskIntoConstraints = false
         subtitleBackdropView.wantsLayer = true
         subtitleBackdropView.layer?.backgroundColor = captionAppearance.windowColor.cgColor
@@ -208,6 +215,7 @@ final class SubtitleOverlayView: NSView {
 
         addSubview(containerChromeView)
         addSubview(subtitleBackdropView)
+        addSubview(resizeHandleCueView)
         subtitleBackdropView.addSubview(subtitleLabel)
 
         NSLayoutConstraint.activate([
@@ -215,6 +223,11 @@ final class SubtitleOverlayView: NSView {
             containerChromeView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -SubtitlePanelGeometry.chromeInset),
             containerChromeView.topAnchor.constraint(equalTo: topAnchor, constant: SubtitlePanelGeometry.chromeInset),
             containerChromeView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -SubtitlePanelGeometry.chromeInset),
+
+            resizeHandleCueView.leadingAnchor.constraint(equalTo: containerChromeView.leadingAnchor),
+            resizeHandleCueView.trailingAnchor.constraint(equalTo: containerChromeView.trailingAnchor),
+            resizeHandleCueView.topAnchor.constraint(equalTo: containerChromeView.topAnchor),
+            resizeHandleCueView.bottomAnchor.constraint(equalTo: containerChromeView.bottomAnchor),
 
             subtitleBackdropView.centerXAnchor.constraint(equalTo: centerXAnchor),
             subtitleBackdropView.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -6),
@@ -461,24 +474,28 @@ final class SubtitleOverlayView: NSView {
 private struct SubtitleContainerChromeContentView: View {
     var body: some View {
         GlassEffectContainer {
-            ZStack {
-                Color.clear
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .glassEffect(
-                        .regular.interactive(),
-                        in: RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    )
-
-                HStack {
-                    SubtitleResizeHandleCue(side: .left)
-                    Spacer(minLength: 0)
-                    SubtitleResizeHandleCue(side: .right)
-                }
-                .allowsHitTesting(false)
-            }
+            Color.clear
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .glassEffect(
+                    .regular.interactive(),
+                    in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+                )
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
         .environment(\.controlActiveState, .active)
+    }
+}
+
+private struct SubtitleResizeHandlesContentView: View {
+    var body: some View {
+        HStack {
+            SubtitleResizeHandleCue(side: .left)
+            Spacer(minLength: 0)
+            SubtitleResizeHandleCue(side: .right)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .allowsHitTesting(false)
     }
 }
 
@@ -511,11 +528,17 @@ private struct SubtitleResizeHandleCue: View {
     var body: some View {
         ZStack(alignment: side.alignment) {
             Image(systemName: "line.3.horizontal")
-                .font(.system(size: 20, weight: .regular))
+                .font(.system(size: 22, weight: .semibold))
                 .symbolRenderingMode(.monochrome)
-                .foregroundStyle(Color.black.opacity(0.58))
+                .foregroundStyle(Color.white.opacity(0.94))
                 .rotationEffect(.degrees(90))
-                .padding(side.paddingEdge, 4)
+                .frame(width: 24, height: 42)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.black.opacity(0.28))
+                )
+                .shadow(color: Color.black.opacity(0.35), radius: 2, x: 0, y: 1)
+                .padding(side.paddingEdge, 3)
         }
         .frame(width: SubtitlePanelGeometry.resizeEdgeThickness)
         .frame(maxHeight: .infinity)
