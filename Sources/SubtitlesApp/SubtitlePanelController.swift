@@ -286,13 +286,13 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
                 screenFrame: screenFrame
             )
             panel.setFrame(
-                frameByApplyingPreferredPanelHeight(to: nextFrame, screenFrame: screenFrame),
+                frameByApplyingPreferredPanelHeightPreservingBottom(to: nextFrame, screenFrame: screenFrame),
                 display: true
             )
         }
 
         panel.setFrame(
-            frameByApplyingPreferredPanelHeight(to: panel.frame, screenFrame: screenFrame),
+            frameByApplyingPreferredPanelHeightPreservingBottom(to: panel.frame, screenFrame: screenFrame),
             display: true
         )
 
@@ -440,7 +440,10 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
 
     private func applyPreferredPanelHeightAfterTransientInteraction() {
         let screenFrame = (panel.screen ?? NSScreen.main)?.visibleFrame ?? panel.frame
-        let nextFrame = frameByApplyingPreferredPanelHeight(to: panel.frame, screenFrame: screenFrame)
+        let nextFrame = frameByApplyingPreferredPanelHeightPreservingBottom(
+            to: panel.frame,
+            screenFrame: screenFrame
+        )
         guard !panel.frame.isNearlyEqual(to: nextFrame) else {
             return
         }
@@ -450,6 +453,17 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
 
     private func frameByApplyingPreferredPanelHeight(to frame: NSRect, screenFrame: NSRect) -> NSRect {
         SubtitlePanelGeometry.frameByApplyingPreferredHeight(
+            overlayView.preferredPanelHeight(forPanelWidth: frame.width),
+            to: frame,
+            screenFrame: screenFrame
+        )
+    }
+
+    private func frameByApplyingPreferredPanelHeightPreservingBottom(
+        to frame: NSRect,
+        screenFrame: NSRect
+    ) -> NSRect {
+        SubtitlePanelGeometry.frameByApplyingPreferredHeightPreservingBottom(
             overlayView.preferredPanelHeight(forPanelWidth: frame.width),
             to: frame,
             screenFrame: screenFrame

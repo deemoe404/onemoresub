@@ -236,6 +236,33 @@ final class SubtitlePanelGeometryTests: XCTestCase {
         XCTAssertEqual(adjusted.height, 220)
     }
 
+    func testPreferredHeightFramePreservingBottomKeepsBottomStable() {
+        let initial = CGRect(x: 200, y: 100, width: 800, height: 150)
+
+        let adjusted = SubtitlePanelGeometry.frameByApplyingPreferredHeightPreservingBottom(
+            220,
+            to: initial,
+            screenFrame: screenFrame
+        )
+
+        XCTAssertEqual(adjusted.minY, initial.minY)
+        XCTAssertEqual(adjusted.height, 220)
+        XCTAssertEqual(adjusted.width, initial.width)
+    }
+
+    func testPreferredHeightFramePreservingBottomClampsToVisibleScreen() {
+        let initial = CGRect(x: 200, y: 760, width: 800, height: 80)
+
+        let adjusted = SubtitlePanelGeometry.frameByApplyingPreferredHeightPreservingBottom(
+            180,
+            to: initial,
+            screenFrame: screenFrame
+        )
+
+        XCTAssertEqual(adjusted.maxY, screenFrame.maxY)
+        XCTAssertEqual(adjusted.height, 180)
+    }
+
     func testClampedFrameStaysInsideScreen() {
         let frame = CGRect(x: -200, y: -50, width: 2_000, height: 900)
 
