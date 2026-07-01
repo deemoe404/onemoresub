@@ -15,8 +15,9 @@ protocol SubtitleOverlayViewDelegate: AnyObject {
 final class SubtitleOverlayView: NSView {
     private static let fileNameFont = NSFont.systemFont(ofSize: 12, weight: .medium)
     private static let fileNameHorizontalInsetInsideContainer: CGFloat = 40
-    private static let fileNameBottomInsetInsideContainer: CGFloat = 16
-    private static let fileNameSubtitleGap: CGFloat = 12
+    private static let fileNameBottomInsetInsideContainer: CGFloat = 8
+    private static let fileNameSubtitleGap: CGFloat = 6
+    private static let subtitleTopInsetInsideContainer: CGFloat = 10
     private static let noFileSelectedText = "No subtitle file selected"
 
     private enum TrackingRole: String {
@@ -258,7 +259,7 @@ final class SubtitleOverlayView: NSView {
         subtitleBackdropView.addSubview(subtitleLabel)
 
         let subtitleFileNameGapConstraint = subtitleBackdropView.bottomAnchor.constraint(
-            lessThanOrEqualTo: fileNameLabel.topAnchor,
+            equalTo: fileNameLabel.topAnchor,
             constant: -Self.fileNameSubtitleGap
         )
         subtitleFileNameGapConstraint.priority = .defaultHigh
@@ -276,7 +277,10 @@ final class SubtitleOverlayView: NSView {
             resizeHandleCueView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -SubtitlePanelGeometry.chromeInset),
 
             subtitleBackdropView.centerXAnchor.constraint(equalTo: centerXAnchor),
-            subtitleBackdropView.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -6),
+            subtitleBackdropView.topAnchor.constraint(
+                greaterThanOrEqualTo: topAnchor,
+                constant: SubtitlePanelGeometry.chromeInset + Self.subtitleTopInsetInsideContainer
+            ),
             subtitleBackdropView.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 24),
             subtitleBackdropView.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -24),
 
@@ -435,7 +439,9 @@ final class SubtitleOverlayView: NSView {
         let fileNameHeight = measuredFileStatusHeight(forPanelWidth: width)
         let labelVerticalPadding: CGFloat = 16
         let fileNameVerticalSpace = fileNameHeight > 0 ? fileNameHeight + Self.fileNameSubtitleGap : 0
-        let containerVerticalPadding: CGFloat = 32 + 2 * SubtitlePanelGeometry.chromeInset
+        let containerVerticalPadding = Self.subtitleTopInsetInsideContainer
+            + Self.fileNameBottomInsetInsideContainer
+            + 2 * SubtitlePanelGeometry.chromeInset
         return ceil(textHeight + labelVerticalPadding + containerVerticalPadding)
             + ceil(fileNameVerticalSpace)
     }

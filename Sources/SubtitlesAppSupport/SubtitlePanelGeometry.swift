@@ -14,7 +14,7 @@ public enum SubtitlePanelGeometry {
         public static let bottom = ResizeEdges(rawValue: 1 << 3)
     }
 
-    public static let chromeInset: CGFloat = 32
+    public static let chromeInset: CGFloat = 24
     public static let chromeRenderMargin: CGFloat = 20
     public static let resizeEdgeThickness: CGFloat = 28
     public static let minimumWidth: CGFloat = 420
