@@ -119,16 +119,23 @@ private final class SubtitleToolbarModel: ObservableObject {
     var adjustOffset: ((TimeInterval) -> Void)?
     var requestAppleTVCalibration: (() -> Void)?
 
-    var statusKind: SubtitleToolbarStatusKind {
-        SubtitleToolbarStatusKind(sourceLabel: sourceLabel)
-    }
-
     var playbackTimeText: String {
         formatTime(playbackTime)
     }
 
     var offsetText: String {
         formatOffset(offset)
+    }
+
+    var playbackStatusHelp: String {
+        switch sourceLabel {
+        case "Manual":
+            return "Manual playback timing"
+        case "TV calibrated":
+            return "Apple TV calibrated playback timing"
+        default:
+            return "Playback timing source: \(sourceLabel)"
+        }
     }
 
     var syncTargetHelp: String {
@@ -155,56 +162,6 @@ private final class SubtitleToolbarModel: ObservableObject {
 
     private func formatOffset(_ offset: TimeInterval) -> String {
         String(format: "%+.1fs", offset)
-    }
-}
-
-private enum SubtitleToolbarStatusKind {
-    case notSynced
-    case appleTVCalibrated
-    case unknown
-
-    init(sourceLabel: String) {
-        switch sourceLabel {
-        case "Manual":
-            self = .notSynced
-        case "TV calibrated":
-            self = .appleTVCalibrated
-        default:
-            self = .unknown
-        }
-    }
-
-    var symbolName: String {
-        switch self {
-        case .notSynced:
-            return "arrow.triangle.2.circlepath"
-        case .appleTVCalibrated:
-            return "appletv.fill"
-        case .unknown:
-            return "questionmark.circle.fill"
-        }
-    }
-
-    var tint: Color {
-        switch self {
-        case .notSynced:
-            return .yellow
-        case .appleTVCalibrated:
-            return .green
-        case .unknown:
-            return .gray
-        }
-    }
-
-    var accessibilityLabel: String {
-        switch self {
-        case .notSynced:
-            return "Not synced"
-        case .appleTVCalibrated:
-            return "Apple TV calibrated playback"
-        case .unknown:
-            return "Unknown playback source"
-        }
     }
 }
 
@@ -331,22 +288,7 @@ private struct SubtitleToolbarContentView: View {
 
     private var statusView: some View {
         HStack(spacing: 6) {
-            Image(systemName: model.statusKind.symbolName)
-                .font(.system(size: 15, weight: .semibold))
-                .symbolRenderingMode(.monochrome)
-                .foregroundStyle(model.statusKind.tint)
-                .accessibilityLabel(Text(model.statusKind.accessibilityLabel))
-                .help(model.statusKind.accessibilityLabel)
-
-            Text(model.playbackTimeText)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(.primary)
-
-            Text(model.offsetText)
-                .font(.system(size: 13, weight: .medium, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
+            playbackReadout
 
             Stepper(
                 "Subtitle offset",
@@ -364,5 +306,23 @@ private struct SubtitleToolbarContentView: View {
             .accessibilityLabel(Text("Adjust subtitle offset"))
             .accessibilityValue(Text(model.offsetText))
         }
+    }
+
+    private var playbackReadout: some View {
+        HStack(spacing: 6) {
+            Text(model.playbackTimeText)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+
+            Text(model.offsetText)
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Playback time"))
+        .accessibilityValue(Text("\(model.playbackStatusHelp), \(model.playbackTimeText), offset \(model.offsetText)"))
+        .help(model.playbackStatusHelp)
     }
 }
