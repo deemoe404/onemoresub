@@ -17,6 +17,7 @@ final class SubtitleOverlayView: NSView {
     private static let fileNameHorizontalInsetInsideContainer: CGFloat = 40
     private static let fileNameBottomInsetInsideContainer: CGFloat = 16
     private static let fileNameSubtitleGap: CGFloat = 12
+    private static let noFileSelectedText = "No subtitle file selected"
 
     private enum TrackingRole: String {
         case subtitle
@@ -203,7 +204,7 @@ final class SubtitleOverlayView: NSView {
             context.duration = animated ? 0.12 : 0
             containerChromeView.animator().alphaValue = visible ? 1 : 0
             resizeHandleCueView.animator().alphaValue = visible ? 1 : 0
-            fileNameLabel.animator().alphaValue = visible && hasLoadedFileName ? 1 : 0
+            fileNameLabel.animator().alphaValue = visible ? 1 : 0
         }
     }
 
@@ -290,6 +291,7 @@ final class SubtitleOverlayView: NSView {
         ])
 
         updateSubtitleText()
+        updateLoadedFileName()
     }
 
     private func rebuildTrackingAreas() {
@@ -431,7 +433,7 @@ final class SubtitleOverlayView: NSView {
             maximumNumberOfLines: subtitleLabel.maximumNumberOfLines,
             lineBreakMode: subtitleLabel.lineBreakMode
         )
-        let fileNameHeight = measuredLoadedFileNameHeight(forPanelWidth: width)
+        let fileNameHeight = measuredFileStatusHeight(forPanelWidth: width)
         let labelVerticalPadding: CGFloat = 16
         let fileNameVerticalSpace = fileNameHeight > 0 ? fileNameHeight + Self.fileNameSubtitleGap : 0
         let containerVerticalPadding: CGFloat = 32 + 2 * SubtitlePanelGeometry.chromeInset
@@ -491,13 +493,12 @@ final class SubtitleOverlayView: NSView {
     }
 
     private func updateLoadedFileName() {
-        let fileName = loadedFileNameForDisplay
-        fileNameLabel.isHidden = fileName == nil
-        fileNameLabel.alphaValue = fileName != nil && isContainerChromeVisible ? 1 : 0
-        subtitleFileNameGapConstraint?.isActive = fileName != nil
+        fileNameLabel.isHidden = false
+        fileNameLabel.alphaValue = isContainerChromeVisible ? 1 : 0
+        subtitleFileNameGapConstraint?.isActive = true
 
         fileNameLabel.attributedStringValue = NSAttributedString(
-            string: fileName ?? "",
+            string: fileStatusTextForDisplay,
             attributes: fileNameAttributes()
         )
         updateFileNamePreferredWidth()
@@ -508,10 +509,6 @@ final class SubtitleOverlayView: NSView {
         subtitleText.isEmpty ? " " : subtitleText
     }
 
-    private var hasLoadedFileName: Bool {
-        loadedFileNameForDisplay != nil
-    }
-
     private var loadedFileNameForDisplay: String? {
         guard let loadedFileName, !loadedFileName.isEmpty else {
             return nil
@@ -519,14 +516,14 @@ final class SubtitleOverlayView: NSView {
         return loadedFileName
     }
 
-    private func measuredLoadedFileNameHeight(forPanelWidth width: CGFloat) -> CGFloat {
-        guard let fileName = loadedFileNameForDisplay else {
-            return 0
-        }
+    private var fileStatusTextForDisplay: String {
+        loadedFileNameForDisplay ?? Self.noFileSelectedText
+    }
 
+    private func measuredFileStatusHeight(forPanelWidth width: CGFloat) -> CGFloat {
         let labelWidth = max(1, width - 2 * fileNameHorizontalInset)
         return measuredTextHeight(
-            NSAttributedString(string: fileName, attributes: fileNameAttributes()),
+            NSAttributedString(string: fileStatusTextForDisplay, attributes: fileNameAttributes()),
             constrainedTo: labelWidth,
             maximumNumberOfLines: 0,
             lineBreakMode: .byCharWrapping
