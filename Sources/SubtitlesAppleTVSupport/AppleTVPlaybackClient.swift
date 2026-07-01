@@ -1,46 +1,55 @@
 import AppKit
 import ApplicationServices
 import Foundation
+import SubtitlesAppSupport
 
-public final class AppleTVPlaybackClient {
-    public static let tvBundleIdentifier = "com.apple.TV"
+public extension ExternalPlaybackTarget {
+    static let appleTV = ExternalPlaybackTarget(
+        id: "apple-tv",
+        displayName: "Apple TV",
+        symbolName: "appletv.fill"
+    )
+}
 
-    private let bundleIdentifier: String
+public final class AppleTVPlaybackClient: ExternalPlaybackClient {
+    public static let bundleIdentifier = "com.apple.TV"
+    public static let appName = "TV.app"
+    public let target = ExternalPlaybackTarget.appleTV
+
     private let runningApplicationProvider: (String) -> [NSRunningApplication]
 
     public convenience init() {
         self.init(
-            bundleIdentifier: Self.tvBundleIdentifier,
             runningApplicationProvider: NSRunningApplication.runningApplications(withBundleIdentifier:)
         )
     }
 
     init(
-        bundleIdentifier: String,
         runningApplicationProvider: @escaping (String) -> [NSRunningApplication]
     ) {
-        self.bundleIdentifier = bundleIdentifier
         self.runningApplicationProvider = runningApplicationProvider
     }
 
-    public func calibratedSnapshot() -> Result<AppleTVPlaybackSnapshot, AppleTVPlaybackError> {
-        guard !runningApplicationProvider(bundleIdentifier).isEmpty else {
-            return .failure(.notRunning)
+    public func currentSnapshot() -> Result<ExternalPlaybackSnapshot, ExternalPlaybackError> {
+        guard !runningApplicationProvider(Self.bundleIdentifier).isEmpty else {
+            return .failure(.notRunning(appName: Self.appName))
         }
 
         if let accessibilitySnapshot = snapshotFromAccessibility(revealControls: true) {
             return accessibilitySnapshot
         }
 
-        return .failure(.missingPosition)
+        return .failure(.missingPosition(appName: Self.appName))
     }
 
-    private func snapshotFromAccessibility(revealControls: Bool) -> Result<AppleTVPlaybackSnapshot, AppleTVPlaybackError>? {
+    private func snapshotFromAccessibility(
+        revealControls: Bool
+    ) -> Result<ExternalPlaybackSnapshot, ExternalPlaybackError>? {
         guard AXIsProcessTrusted() else {
-            return .failure(.accessibilityPermissionDenied)
+            return .failure(.accessibilityPermissionDenied(appName: Self.appName))
         }
-        guard let app = runningApplicationProvider(bundleIdentifier).first else {
-            return .failure(.notRunning)
+        guard let app = runningApplicationProvider(Self.bundleIdentifier).first else {
+            return .failure(.notRunning(appName: Self.appName))
         }
 
         let applicationElement = AXUIElementCreateApplication(app.processIdentifier)
@@ -54,9 +63,9 @@ public final class AppleTVPlaybackClient {
 
         guard revealControls,
               let videoButton = firstElement(in: root, matching: { element in
-            stringAttribute(kAXRoleAttribute, from: element) == "AXButton"
-                && stringAttribute(kAXDescriptionAttribute, from: element) == "Video"
-        }) else {
+                  stringAttribute(kAXRoleAttribute, from: element) == "AXButton"
+                      && stringAttribute(kAXDescriptionAttribute, from: element) == "Video"
+              }) else {
             return nil
         }
 
@@ -80,9 +89,9 @@ public final class AppleTVPlaybackClient {
         return applicationElement
     }
 
-    private func accessibilitySnapshot(in root: AXUIElement) -> AppleTVPlaybackSnapshot? {
+    private func accessibilitySnapshot(in root: AXUIElement) -> ExternalPlaybackSnapshot? {
         var position: TimeInterval?
-        var state: AppleTVPlaybackState?
+        var state: ExternalPlaybackState?
 
         walk(root) { element in
             if position == nil,
@@ -104,7 +113,7 @@ public final class AppleTVPlaybackClient {
             return nil
         }
 
-        return AppleTVPlaybackSnapshot(
+        return ExternalPlaybackSnapshot(
             state: state ?? .unknown,
             position: position
         )
@@ -160,5 +169,18 @@ public final class AppleTVPlaybackClient {
             return nil
         }
         return value as AnyObject?
+    }
+}
+
+public enum AppleTVPlaybackParser {
+    public static func stateFromPlaybackButtonDescription(_ description: String?) -> ExternalPlaybackState? {
+        switch description?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "pause":
+            return .playing
+        case "play":
+            return .paused
+        default:
+            return nil
+        }
     }
 }

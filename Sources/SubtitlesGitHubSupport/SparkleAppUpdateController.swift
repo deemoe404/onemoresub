@@ -1,21 +1,22 @@
 import Cocoa
 import Sparkle
+import SubtitlesAppCommon
 
-final class AppUpdateController {
+public final class SparkleAppUpdateController: AppUpdateControlling {
     private let updaterController: SPUStandardUpdaterController?
     private var canCheckForUpdatesObservation: NSKeyValueObservation?
 
-    var onCanCheckForUpdatesChanged: (() -> Void)?
+    public var onCanCheckForUpdatesChanged: (() -> Void)?
 
-    var isConfigured: Bool {
+    public var isConfigured: Bool {
         updaterController != nil
     }
 
-    var canCheckForUpdates: Bool {
+    public var canCheckForUpdates: Bool {
         updaterController?.updater.canCheckForUpdates ?? false
     }
 
-    init(bundle: Bundle = .main) {
+    public init(bundle: Bundle = .main) {
         if Self.hasRequiredConfiguration(in: bundle) {
             updaterController = SPUStandardUpdaterController(
                 startingUpdater: true,
@@ -35,7 +36,7 @@ final class AppUpdateController {
         }
     }
 
-    func checkForUpdates() {
+    public func checkForUpdates() {
         guard let updaterController else {
             presentNotConfiguredAlert()
             return

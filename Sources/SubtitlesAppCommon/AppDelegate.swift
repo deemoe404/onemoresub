@@ -1,4 +1,3 @@
-@preconcurrency import ApplicationServices
 @preconcurrency import Cocoa
 import SubtitleCore
 import SubtitlesAppSupport
@@ -10,6 +9,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
         "x-apple.systempreferences:com.apple.preference.universalaccess?Captioning",
         "x-apple.systempreferences:com.apple.Accessibility-Settings.extension",
         "x-apple.systempreferences:com.apple.preference.universalaccess"
+    ].compactMap(URL.init(string:))
+    private static let automationPermissionSettingsURLs = [
+        "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation",
+        "x-apple.systempreferences:com.apple.PrivacySecurity.extension?Privacy_Automation",
+        "x-apple.systempreferences:com.apple.preference.security"
     ].compactMap(URL.init(string:))
     private static let accessibilityPermissionSettingsURLs = [
         "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
@@ -27,7 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
         let sourceLabel: String
     }
 
-    private struct AccessibilityPermissionMenuState: Equatable {
+    private struct SettingsMenuState: Equatable {
         let title: String
         let isEnabled: Bool
     }
@@ -35,18 +39,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
     private struct MenuDisplayState: Equatable {
         let showHideTitle: String
         let loadedFileTitle: String
-        let accessibilityPermission: AccessibilityPermissionMenuState
+        let automationPermission: SettingsMenuState?
+        let accessibilityPermission: SettingsMenuState?
         let canCheckForUpdates: Bool
     }
 
     private let clock = SubtitlePlayerClock()
     private let panelController = SubtitlePanelController()
-    private let appleTVClient = AppleTVPlaybackClient()
-    private let updateController = AppUpdateController()
+    private let updateController: any AppUpdateControlling
+    private let playbackClientsByID: [String: any ExternalPlaybackClient]
+    private let playbackTargets: [ExternalPlaybackTarget]
+    private let defaultPlaybackTargetID: String?
+    private let showsAutomationSettings: Bool
+    private let showsAccessibilitySettings: Bool
+    private let showsUpdateMenu: Bool
 
     private var statusItem: NSStatusItem?
     private var showHideMenuItem: NSMenuItem?
     private var loadedFileMenuItem: NSMenuItem?
+    private var automationPermissionMenuItem: NSMenuItem?
     private var accessibilityPermissionMenuItem: NSMenuItem?
     private var checkForUpdatesMenuItem: NSMenuItem?
 
@@ -66,11 +77,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
         }
     )
 
+    init(configuration: SubtitlesAppConfiguration) {
+        var clientsByID: [String: any ExternalPlaybackClient] = [:]
+        var targets: [ExternalPlaybackTarget] = []
+        for client in configuration.playbackClients where clientsByID[client.target.id] == nil {
+            clientsByID[client.target.id] = client
+            targets.append(client.target)
+        }
+
+        updateController = configuration.updateController
+        playbackClientsByID = clientsByID
+        playbackTargets = targets
+        defaultPlaybackTargetID = configuration.defaultPlaybackTargetID
+        showsAutomationSettings = configuration.showsAutomationSettings
+        showsAccessibilitySettings = configuration.showsAccessibilitySettings
+        showsUpdateMenu = configuration.showsUpdateMenu
+        super.init()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         updateController.onCanCheckForUpdatesChanged = { [weak self] in
             self?.updateMenuState()
         }
         panelController.delegate = self
+        panelController.setSyncTargets(playbackTargets, defaultTargetID: defaultPlaybackTargetID)
         setupStatusItem()
         panelController.show()
         refreshSubtitleText()
@@ -101,23 +131,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
 
         menu.addItem(.separator())
 
-        let accessibilityPermission = NSMenuItem(
-            title: "Request Accessibility Access",
-            action: #selector(requestAccessibilityPermission),
-            keyEquivalent: ""
-        )
-        accessibilityPermissionMenuItem = accessibilityPermission
-        menu.addItem(accessibilityPermission)
+        if showsAutomationSettings {
+            let automationPermission = NSMenuItem(
+                title: "Open Automation Settings...",
+                action: #selector(openAutomationPermissionSettingsFromMenu),
+                keyEquivalent: ""
+            )
+            automationPermissionMenuItem = automationPermission
+            menu.addItem(automationPermission)
+        }
+        if showsAccessibilitySettings {
+            let accessibilityPermission = NSMenuItem(
+                title: "Open Accessibility Settings...",
+                action: #selector(openAccessibilityPermissionSettingsFromMenu),
+                keyEquivalent: ""
+            )
+            accessibilityPermissionMenuItem = accessibilityPermission
+            menu.addItem(accessibilityPermission)
+        }
         menu.addItem(NSMenuItem(title: "Open Caption Settings...", action: #selector(openCaptionSettingsFromMenu), keyEquivalent: ""))
-        menu.addItem(.separator())
 
-        let checkForUpdates = NSMenuItem(
-            title: "Check for Updates...",
-            action: #selector(checkForUpdatesFromMenu),
-            keyEquivalent: ""
-        )
-        checkForUpdatesMenuItem = checkForUpdates
-        menu.addItem(checkForUpdates)
+        if showsUpdateMenu {
+            menu.addItem(.separator())
+
+            let checkForUpdates = NSMenuItem(
+                title: "Check for Updates...",
+                action: #selector(checkForUpdatesFromMenu),
+                keyEquivalent: ""
+            )
+            checkForUpdatesMenuItem = checkForUpdates
+            menu.addItem(checkForUpdates)
+        }
 
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit \(AppMetadata.displayName)", action: #selector(quit), keyEquivalent: ""))
@@ -262,18 +306,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
         updateMenuState()
     }
 
-    @objc private func requestAccessibilityPermission() {
-        let wasTrusted = AXIsProcessTrusted()
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(options)
-        if wasTrusted || !AXIsProcessTrusted() {
-            openAccessibilityPermissionSettings()
-        }
-        updateMenuState()
-    }
-
     @objc private func openCaptionSettingsFromMenu() {
         openCaptionSettings()
+    }
+
+    @objc private func openAutomationPermissionSettingsFromMenu() {
+        openAutomationPermissionSettings()
+    }
+
+    @objc private func openAccessibilityPermissionSettingsFromMenu() {
+        openAccessibilityPermissionSettings()
     }
 
     @objc private func checkForUpdatesFromMenu() {
@@ -327,6 +369,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
         alert.runModal()
     }
 
+    private func openAutomationPermissionSettings() {
+        for url in Self.automationPermissionSettingsURLs where NSWorkspace.shared.open(url) {
+            return
+        }
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Could not open Automation permissions"
+        alert.informativeText = "Open System Settings > Privacy & Security > Automation, then allow Subtitles to read QuickTime Player."
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
     private func openAccessibilityPermissionSettings() {
         for url in Self.accessibilityPermissionSettingsURLs where NSWorkspace.shared.open(url) {
             return
@@ -335,7 +390,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Could not open Accessibility permissions"
-        alert.informativeText = "Open System Settings > Privacy & Security > Accessibility, then remove and re-enable Subtitles manually."
+        alert.informativeText = "Open System Settings > Privacy & Security > Accessibility, then allow Subtitles."
         alert.addButton(withTitle: "OK")
         alert.runModal()
     }
@@ -396,7 +451,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
         let state = MenuDisplayState(
             showHideTitle: panelController.isVisible ? "Hide Subtitle Window" : "Show Subtitle Window",
             loadedFileTitle: document?.sourceURL?.lastPathComponent ?? "No Subtitle Loaded",
-            accessibilityPermission: accessibilityPermissionMenuState(),
+            automationPermission: showsAutomationSettings ? settingsMenuState(title: "Open Automation Settings...") : nil,
+            accessibilityPermission: showsAccessibilitySettings ? settingsMenuState(title: "Open Accessibility Settings...") : nil,
             canCheckForUpdates: !updateController.isConfigured || updateController.canCheckForUpdates
         )
         guard state != lastMenuDisplayState else {
@@ -405,21 +461,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
         lastMenuDisplayState = state
         showHideMenuItem?.title = state.showHideTitle
         loadedFileMenuItem?.title = state.loadedFileTitle
-        accessibilityPermissionMenuItem?.title = state.accessibilityPermission.title
-        accessibilityPermissionMenuItem?.isEnabled = state.accessibilityPermission.isEnabled
+        automationPermissionMenuItem?.title = state.automationPermission?.title ?? "Open Automation Settings..."
+        automationPermissionMenuItem?.isEnabled = state.automationPermission?.isEnabled ?? false
+        accessibilityPermissionMenuItem?.title = state.accessibilityPermission?.title ?? "Open Accessibility Settings..."
+        accessibilityPermissionMenuItem?.isEnabled = state.accessibilityPermission?.isEnabled ?? false
         checkForUpdatesMenuItem?.isEnabled = state.canCheckForUpdates
     }
 
-    private func accessibilityPermissionMenuState() -> AccessibilityPermissionMenuState {
-        if AXIsProcessTrusted() {
-            return AccessibilityPermissionMenuState(
-                title: "Refresh Accessibility Access",
-                isEnabled: true
-            )
-        }
-
-        return AccessibilityPermissionMenuState(
-            title: "Request Accessibility Access",
+    private func settingsMenuState(title: String) -> SettingsMenuState {
+        SettingsMenuState(
+            title: title,
             isEnabled: true
         )
     }
@@ -428,25 +479,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
         adjustOffset(by: delta)
     }
 
-    func subtitlePanelDidRequestAppleTVCalibration(_ panelController: SubtitlePanelController) {
-        switch appleTVClient.calibratedSnapshot() {
+    func subtitlePanel(_ panelController: SubtitlePanelController, didRequestPlaybackSyncWith targetID: String) {
+        guard let client = playbackClientsByID[targetID] else {
+            presentPlaybackSyncError(
+                messageText: "Could not sync playback",
+                informativeText: "The selected playback target is not available in this build."
+            )
+            return
+        }
+
+        switch client.currentSnapshot() {
         case let .success(snapshot):
             clock.pause()
             clock.seek(to: snapshot.position)
             if snapshot.state.isActivelyAdvancing {
                 clock.play()
             }
-            syncCoordinator.markAppleTVCalibrated()
+            syncCoordinator.markSynced(with: "\(client.target.displayName) synced")
             refreshSubtitleText()
 
         case let .failure(error):
-            let alert = NSAlert()
-            alert.alertStyle = .warning
-            alert.messageText = "Could not calibrate Apple TV"
-            alert.informativeText = error.localizedDescription
-            alert.addButton(withTitle: "OK")
-            alert.runModal()
+            presentPlaybackSyncError(
+                messageText: "Could not sync \(client.target.displayName)",
+                informativeText: error.localizedDescription
+            )
         }
+    }
+
+    private func presentPlaybackSyncError(messageText: String, informativeText: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = messageText
+        alert.informativeText = informativeText
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     func subtitlePanel(_ panelController: SubtitlePanelController, didRequestLoadURL url: URL) {

@@ -16,20 +16,20 @@ final class PlaybackSyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(state.sourceLabel, "Manual")
     }
 
-    func testAppleTVCalibrationChangesOnlySourceLabel() {
+    func testQuickTimeSyncChangesOnlySourceLabel() {
         let manualTime = MutablePlaybackState(mediaTime: 3, isPlaying: false)
         let coordinator = PlaybackSyncCoordinator(
             manualTimeProvider: { manualTime.mediaTime },
             manualIsPlayingProvider: { manualTime.isPlaying }
         )
 
-        coordinator.markAppleTVCalibrated()
+        coordinator.markQuickTimeSynced()
 
         var state = coordinator.renderState(offset: 0.5)
         XCTAssertEqual(state.mediaTime, 3)
         XCTAssertEqual(state.effectiveTime, 3.5)
         XCTAssertFalse(state.isPlaying)
-        XCTAssertEqual(state.sourceLabel, "TV calibrated")
+        XCTAssertEqual(state.sourceLabel, "QuickTime synced")
 
         manualTime.mediaTime = 7
         manualTime.isPlaying = true
@@ -38,7 +38,7 @@ final class PlaybackSyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(state.mediaTime, 7)
         XCTAssertEqual(state.effectiveTime, 6)
         XCTAssertTrue(state.isPlaying)
-        XCTAssertEqual(state.sourceLabel, "TV calibrated")
+        XCTAssertEqual(state.sourceLabel, "QuickTime synced")
     }
 
     func testMarkManualRestoresManualSourceLabel() {
@@ -47,7 +47,7 @@ final class PlaybackSyncCoordinatorTests: XCTestCase {
             manualIsPlayingProvider: { false }
         )
 
-        coordinator.markAppleTVCalibrated()
+        coordinator.markQuickTimeSynced()
         coordinator.markManual()
 
         let state = coordinator.renderState(offset: 2)

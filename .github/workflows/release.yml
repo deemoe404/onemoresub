@@ -15,6 +15,68 @@ permissions:
   contents: write
 
 jobs:
+  build-appstore-artifact:
+    name: Build App Store Channel Artifact
+    runs-on: macos-26
+
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag_name }}
+      SUBTITLES_CODESIGN_IDENTITY: "-"
+      SUBTITLES_BUNDLE_IDENTIFIER: local.Subtitles.AppStore
+      SUBTITLES_DISTRIBUTION_CHANNEL: appstore
+      SUBTITLES_APP_BUNDLE_NAME: Subtitles-AppStore
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag_name }}
+          persist-credentials: false
+
+      - name: Show toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcrun swift --version
+
+      - name: Prepare App Store artifact metadata
+        run: |
+          version="${RELEASE_TAG#v}"
+          version="${version%%-*}"
+          version="${version%%+*}"
+
+          if [[ ! "$version" =~ ^[0-9]+[.][0-9]+[.][0-9]+$ ]]; then
+            echo "::error::Release tag must look like v1.2.3 or 1.2.3"
+            exit 1
+          fi
+
+          echo "SUBTITLES_BUNDLE_SHORT_VERSION=$version" >>"$GITHUB_ENV"
+          echo "SUBTITLES_BUNDLE_VERSION=${GITHUB_RUN_NUMBER}" >>"$GITHUB_ENV"
+
+      - name: Package App Store channel zip
+        id: package_appstore
+        run: |
+          safe_tag="${RELEASE_TAG//\//-}"
+          app_path="$(
+            env -u SUBTITLES_SPARKLE_FEED_URL -u SUBTITLES_SPARKLE_PUBLIC_ED_KEY \
+            scripts/package-app.sh | tail -n 1
+          )"
+          asset_name="Subtitles-${safe_tag}-macOS-AppStore-channel.zip"
+          asset_path="dist/${asset_name}"
+
+          mkdir -p dist
+          ditto -c -k --norsrc --keepParent "$app_path" "$asset_path"
+
+          echo "asset_name=$asset_name" >>"$GITHUB_OUTPUT"
+          echo "asset_path=$asset_path" >>"$GITHUB_OUTPUT"
+
+      - name: Upload App Store channel workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package_appstore.outputs.asset_name }}
+          path: ${{ steps.package_appstore.outputs.asset_path }}
+          if-no-files-found: error
+
   build-release:
     name: Build Release
     runs-on: macos-26
@@ -23,6 +85,7 @@ jobs:
       RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag_name }}
       SUBTITLES_CODESIGN_IDENTITY: "-"
       SUBTITLES_BUNDLE_IDENTIFIER: local.Subtitles
+      SUBTITLES_DISTRIBUTION_CHANNEL: github
       SUBTITLES_SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SUBTITLES_SPARKLE_PUBLIC_ED_KEY }}
       SUBTITLES_SPARKLE_PRIVATE_KEY: ${{ secrets.SUBTITLES_SPARKLE_PRIVATE_KEY }}
 
@@ -73,7 +136,7 @@ jobs:
       - name: Package app zip
         id: package
         run: |
-          app_path="$(scripts/package-app.sh | tail -n 1)"
+          app_path="$(SUBTITLES_DISTRIBUTION_CHANNEL=github scripts/package-app.sh | tail -n 1)"
           safe_tag="${RELEASE_TAG//\//-}"
           asset_name="Subtitles-${safe_tag}-macOS.zip"
           asset_path="dist/${asset_name}"

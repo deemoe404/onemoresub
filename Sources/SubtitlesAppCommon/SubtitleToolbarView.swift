@@ -1,12 +1,13 @@
 @preconcurrency import Cocoa
 import Combine
 import SwiftUI
+import SubtitlesAppSupport
 
 protocol SubtitleToolbarViewDelegate: AnyObject {
     func subtitleToolbarViewDidEnter(_ view: SubtitleToolbarView)
     func subtitleToolbarViewDidExit(_ view: SubtitleToolbarView)
     func subtitleToolbarView(_ view: SubtitleToolbarView, didAdjustOffsetBy delta: TimeInterval)
-    func subtitleToolbarViewDidRequestAppleTVCalibration(_ view: SubtitleToolbarView)
+    func subtitleToolbarView(_ view: SubtitleToolbarView, didRequestPlaybackSyncWith targetID: String)
 }
 
 final class SubtitleToolbarView: NSView {
@@ -71,6 +72,11 @@ final class SubtitleToolbarView: NSView {
         invalidateIntrinsicContentSize()
     }
 
+    func setSyncTargets(_ targets: [ExternalPlaybackTarget], defaultTargetID: String?) {
+        model.setSyncTargets(targets, defaultTargetID: defaultTargetID)
+        invalidateIntrinsicContentSize()
+    }
+
     private func setupView() {
         translatesAutoresizingMaskIntoConstraints = true
         autoresizingMask = [.width, .height]
@@ -81,11 +87,11 @@ final class SubtitleToolbarView: NSView {
             }
             delegate?.subtitleToolbarView(self, didAdjustOffsetBy: delta)
         }
-        model.requestAppleTVCalibration = { [weak self] in
+        model.requestPlaybackSync = { [weak self] targetID in
             guard let self else {
                 return
             }
-            delegate?.subtitleToolbarViewDidRequestAppleTVCalibration(self)
+            delegate?.subtitleToolbarView(self, didRequestPlaybackSyncWith: targetID)
         }
 
         let contentView = FirstMouseHostingView(rootView: SubtitleToolbarContentView(model: model))
@@ -110,14 +116,15 @@ private final class FirstMouseHostingView<Content: View>: NSHostingView<Content>
     }
 }
 
-private final class SubtitleToolbarModel: ObservableObject {
+final class SubtitleToolbarModel: ObservableObject {
     @Published var playbackTime: TimeInterval = 0
     @Published var offset: TimeInterval = 0
     @Published var sourceLabel = "Manual"
-    @Published var syncTarget: SubtitleToolbarSyncTarget = .appleTV
+    @Published var syncTargets: [ExternalPlaybackTarget] = [.quickTime]
+    @Published var selectedSyncTargetID = ExternalPlaybackTarget.quickTime.id
 
     var adjustOffset: ((TimeInterval) -> Void)?
-    var requestAppleTVCalibration: (() -> Void)?
+    var requestPlaybackSync: ((String) -> Void)?
 
     var playbackTimeText: String {
         formatTime(playbackTime)
@@ -131,8 +138,8 @@ private final class SubtitleToolbarModel: ObservableObject {
         switch sourceLabel {
         case "Manual":
             return "Manual playback timing"
-        case "TV calibrated":
-            return "Apple TV calibrated playback timing"
+        case "QuickTime synced":
+            return "QuickTime synced playback timing"
         default:
             return "Playback timing source: \(sourceLabel)"
         }
@@ -143,14 +150,27 @@ private final class SubtitleToolbarModel: ObservableObject {
     }
 
     var syncActionHelp: String {
-        "Sync with \(syncTarget.displayName)"
+        "Sync with \(selectedSyncTarget.displayName)"
+    }
+
+    var selectedSyncTarget: ExternalPlaybackTarget {
+        syncTargets.first { $0.id == selectedSyncTargetID } ?? syncTargets[0]
+    }
+
+    func setSyncTargets(_ targets: [ExternalPlaybackTarget], defaultTargetID: String?) {
+        let normalizedTargets = targets.isEmpty ? [ExternalPlaybackTarget.quickTime] : targets
+        syncTargets = normalizedTargets
+
+        if let defaultPlaybackTargetID = defaultTargetID,
+           normalizedTargets.contains(where: { $0.id == defaultPlaybackTargetID }) {
+            selectedSyncTargetID = defaultPlaybackTargetID
+        } else if !normalizedTargets.contains(where: { $0.id == selectedSyncTargetID }) {
+            selectedSyncTargetID = normalizedTargets[0].id
+        }
     }
 
     func requestCurrentTargetSync() {
-        switch syncTarget {
-        case .appleTV:
-            requestAppleTVCalibration?()
-        }
+        requestPlaybackSync?(selectedSyncTarget.id)
     }
 
     private func formatTime(_ time: TimeInterval) -> String {
@@ -162,26 +182,6 @@ private final class SubtitleToolbarModel: ObservableObject {
 
     private func formatOffset(_ offset: TimeInterval) -> String {
         String(format: "%+.1fs", offset)
-    }
-}
-
-private enum SubtitleToolbarSyncTarget: CaseIterable, Hashable, Identifiable {
-    case appleTV
-
-    var id: Self { self }
-
-    var displayName: String {
-        switch self {
-        case .appleTV:
-            return "Apple TV"
-        }
-    }
-
-    var symbolName: String {
-        switch self {
-        case .appleTV:
-            return "appletv.fill"
-        }
     }
 }
 
@@ -230,16 +230,16 @@ private struct SubtitleToolbarContentView: View {
                 .frame(height: 22)
 
             Menu {
-                Picker("Sync Target", selection: $model.syncTarget) {
-                    ForEach(SubtitleToolbarSyncTarget.allCases) { target in
+                Picker("Sync Target", selection: $model.selectedSyncTargetID) {
+                    ForEach(model.syncTargets) { target in
                         Label(target.displayName, systemImage: target.symbolName)
-                            .tag(target)
+                            .tag(target.id)
                     }
                 }
                 .pickerStyle(.inline)
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: model.syncTarget.symbolName)
+                    Image(systemName: model.selectedSyncTarget.symbolName)
                         .font(.system(size: 14, weight: .semibold))
 
                     Image(systemName: "chevron.down")
@@ -254,7 +254,7 @@ private struct SubtitleToolbarContentView: View {
             .buttonStyle(.plain)
             .help(model.syncTargetHelp)
             .accessibilityLabel(Text("Sync target"))
-            .accessibilityValue(Text(model.syncTarget.displayName))
+            .accessibilityValue(Text(model.selectedSyncTarget.displayName))
         }
         .frame(height: Self.bubbleHeight)
         .glassEffect(.regular.interactive(), in: Capsule())

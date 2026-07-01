@@ -1,7 +1,18 @@
-import Cocoa
+import SubtitlesAppleTVSupport
+import SubtitlesAppCommon
+import SubtitlesAppSupport
+import SubtitlesGitHubSupport
 
-let app = NSApplication.shared
-let delegate = AppDelegate()
-app.delegate = delegate
-app.setActivationPolicy(.accessory)
-app.run()
+runSubtitlesApp(
+    configuration: SubtitlesAppConfiguration(
+        playbackClients: [
+            QuickTimePlaybackClient(),
+            AppleTVPlaybackClient()
+        ],
+        defaultPlaybackTargetID: ExternalPlaybackTarget.appleTV.id,
+        updateController: SparkleAppUpdateController(),
+        showsAutomationSettings: true,
+        showsAccessibilitySettings: true,
+        showsUpdateMenu: true
+    )
+)

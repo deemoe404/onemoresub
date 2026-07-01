@@ -5,8 +5,8 @@ Subtitles is a native macOS menu-bar app for playing an external subtitle file o
 The MVP flow is:
 
 1. Load an `.srt` or `.vtt` file from the menu bar app.
-2. Play a movie in TV.app.
-3. Use the floating toolbar Sync control to calibrate subtitles to the current TV.app playback position.
+2. Play a movie in QuickTime Player.
+3. Use the floating toolbar Sync control to calibrate subtitles to the current player position.
 4. Adjust subtitle offset from the floating toolbar, or resize subtitle width by
    dragging the marked left or right edge of the subtitle container.
 
@@ -26,17 +26,34 @@ it automatically. Set `DEVELOPER_DIR` to override that behavior.
 mise exec -- scripts/check.sh
 mise exec -- scripts/run.sh
 mise exec -- scripts/package-app.sh
+SUBTITLES_DISTRIBUTION_CHANNEL=appstore mise exec -- scripts/package-app.sh
 ```
 
-The packaged app is written to `build/Subtitles.app`.
+The default packaged app is the GitHub/full channel and is written to
+`build/Subtitles.app`. Set `SUBTITLES_DISTRIBUTION_CHANNEL=appstore` to package
+the App Store channel.
 
-`scripts/check.sh` and `scripts/package-app.sh` prepare Sparkle locally before
-running SwiftPM. If you run raw `swift build` or `swift run` commands in a fresh
-checkout, run this first:
+`scripts/check.sh` prepares Sparkle for the GitHub/full channel, then builds and
+packages both channels. GitHub/full packaging also prepares Sparkle. The App
+Store channel uses a Sparkle-free SwiftPM manifest and does not require
+`Vendor/Sparkle`. If you run raw `swift build --product SubtitlesApp` or
+`swift run` commands in a fresh checkout, run this first:
 
 ```sh
 mise exec -- scripts/prepare-sparkle.sh
 ```
+
+## Distribution Channels
+
+The package has two app products:
+
+- `SubtitlesApp`: GitHub/full channel. Includes QuickTime sync, Apple TV sync through Accessibility, and Sparkle updates.
+- `SubtitlesAppStore`: App Store channel. Includes QuickTime read-only sync only and does not link Sparkle or the Apple TV Accessibility target.
+
+`scripts/package-app.sh` maps channels to fixed products: `github` selects
+`SubtitlesApp`, and `appstore` selects `SubtitlesAppStore`. The product is not
+overridable by environment because that would weaken the App Store channel
+boundary.
 
 ## Signing
 
@@ -54,12 +71,18 @@ SUBTITLES_BUNDLE_IDENTIFIER="com.example.Subtitles"
 The same values can also be supplied as environment variables for one-off
 builds.
 
+The App Store channel automatically uses `Subtitles.entitlements` when no custom
+`SUBTITLES_CODESIGN_ENTITLEMENTS` value is set. That entitlement file enables
+App Sandbox, user-selected subtitle file read access, and Apple Events access to
+QuickTime Player.
+
 ## Updates
 
-The app uses [Sparkle](https://sparkle-project.org/) for manual and automatic
-update checks. Sparkle is downloaded into the ignored `Vendor/Sparkle/`
-directory by `scripts/prepare-sparkle.sh`; the binary framework is not committed
-to git.
+The GitHub/full channel uses [Sparkle](https://sparkle-project.org/) for manual
+and automatic update checks. Sparkle is downloaded into the ignored
+`Vendor/Sparkle/` directory by `scripts/prepare-sparkle.sh`; the binary
+framework is not committed to git. The App Store channel does not link Sparkle
+and does not show the update menu item.
 
 Development builds without `SUBTITLES_SPARKLE_FEED_URL` and
 `SUBTITLES_SPARKLE_PUBLIC_ED_KEY` still build and run, but the `Check for
@@ -100,12 +123,15 @@ public/private key pair, and the feed URL stable. `SUBTITLES_APP_NAME`,
 ## Release Automation
 
 GitHub Actions runs `scripts/check.sh` on pushes and pull requests to `main`.
+That check builds both `SubtitlesApp` and `SubtitlesAppStore`, then verifies that
+the GitHub/full package includes Sparkle and the App Store package does not.
 
 When a GitHub Release is published, the release workflow builds the tagged
 checkout on a macOS runner, packages `build/Subtitles.app`, zips the app bundle,
 generates the Sparkle appcast, and uploads both files back to the Release
-assets. The release asset is ad-hoc signed by default; Developer ID signing and
-notarization are separate distribution steps.
+assets. It also produces an App Store-channel workflow artifact without Sparkle.
+The release asset is ad-hoc signed by default; Developer ID signing,
+notarization, and App Store upload signing are separate distribution steps.
 
 Release tags must use `vX.Y.Z` or `X.Y.Z` format. That tag is written into the
 app bundle short version, and the GitHub Actions run number is written into the
@@ -136,18 +162,21 @@ mise exec -- swift run SubtitleHarness at Fixtures/sample.srt 3.1 --offset 0.3
   subtitle width. Height is calculated from the current subtitle text and system
   caption style.
 - Hide or reopen the subtitle window from the menu bar.
-- Use the hover Sync control to read the current Apple TV playback position. The Sync button defaults to Apple TV and also exposes an Apple TV menu item. After calibration, subtitles continue from that TV time using the local clock.
-- If TV.app is not running, missing Accessibility permission, or missing position data, Sync reports the calibration failure and leaves the current subtitle timing unchanged.
+- Use the hover Sync control to read the current player position. After calibration, subtitles continue from that player time using the local clock.
+- App Store builds sync with QuickTime Player only. GitHub/full builds can sync with QuickTime Player or Apple TV.
+- If the selected player is not running, has no open movie document, is missing permission, or returns no position data, Sync reports the calibration failure and leaves the current subtitle timing unchanged.
 
-## Accessibility Permission
+## Automation Permission
 
-The app can read TV.app playback controls for Sync calibration. macOS may require Accessibility permission for that behavior. If the hover Sync control cannot read TV.app, use the menu item `Request Accessibility Access`, then enable the app in System Settings. If permission appears granted but behavior is still broken, use `Refresh Accessibility Access` to reopen the permission location and re-enable the app manually. The menu and hover controls remain usable without that permission.
+The app reads QuickTime Player's current movie time through QuickTime's scripting interface for Sync calibration. macOS may require Automation permission for that behavior. If the hover Sync control cannot read QuickTime Player, use the menu item `Open Automation Settings...`, then allow Subtitles to read QuickTime Player in System Settings. The menu and hover controls remain usable without that permission.
+
+GitHub/full builds also include an Apple TV sync target. That path reads TV.app
+through Accessibility and is intentionally excluded from the App Store channel.
 
 ## Scope
 
-The MVP supports SRT and WebVTT only. ASS/SSA styling, OCR, sandboxing, and
-notarized Developer ID distribution are intentionally out of scope for this
-scaffold.
+The MVP supports SRT and WebVTT only. ASS/SSA styling, OCR, and notarized
+Developer ID distribution are intentionally out of scope for this scaffold.
 
 ## Known Limitations
 

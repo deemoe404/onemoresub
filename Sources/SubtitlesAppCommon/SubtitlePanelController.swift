@@ -5,7 +5,7 @@ import SubtitlesAppSupport
 
 protocol SubtitlePanelControllerDelegate: AnyObject {
     func subtitlePanel(_ panelController: SubtitlePanelController, didAdjustOffsetBy delta: TimeInterval)
-    func subtitlePanelDidRequestAppleTVCalibration(_ panelController: SubtitlePanelController)
+    func subtitlePanel(_ panelController: SubtitlePanelController, didRequestPlaybackSyncWith targetID: String)
     func subtitlePanel(_ panelController: SubtitlePanelController, didRequestLoadURL url: URL)
     func subtitlePanelDidRequestClose(_ panelController: SubtitlePanelController)
 }
@@ -169,6 +169,11 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
         positionToolbarIfVisible()
     }
 
+    func setSyncTargets(_ targets: [ExternalPlaybackTarget], defaultTargetID: String?) {
+        toolbarView.setSyncTargets(targets, defaultTargetID: defaultTargetID)
+        positionToolbarIfVisible()
+    }
+
     func setLoadedFileName(_ fileName: String) {
         overlayView.setLoadedFileName(fileName)
         applyPreferredPanelHeightIfNeeded(display: true)
@@ -316,8 +321,8 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
         delegate?.subtitlePanel(self, didAdjustOffsetBy: delta)
     }
 
-    func subtitleToolbarViewDidRequestAppleTVCalibration(_ view: SubtitleToolbarView) {
-        delegate?.subtitlePanelDidRequestAppleTVCalibration(self)
+    func subtitleToolbarView(_ view: SubtitleToolbarView, didRequestPlaybackSyncWith targetID: String) {
+        delegate?.subtitlePanel(self, didRequestPlaybackSyncWith: targetID)
     }
 
     private func performContainerMove(with _: NSEvent) {

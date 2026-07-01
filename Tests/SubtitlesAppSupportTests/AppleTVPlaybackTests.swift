@@ -1,4 +1,5 @@
 import XCTest
+@testable import SubtitlesAppleTVSupport
 @testable import SubtitlesAppSupport
 
 final class AppleTVPlaybackTests: XCTestCase {
@@ -10,8 +11,8 @@ final class AppleTVPlaybackTests: XCTestCase {
 
     func testPermissionErrorDescriptionIsAccessibilitySpecific() {
         XCTAssertEqual(
-            AppleTVPlaybackError.accessibilityPermissionDenied.localizedDescription,
-            "Accessibility permission for Subtitles is not granted."
+            ExternalPlaybackError.accessibilityPermissionDenied(appName: AppleTVPlaybackClient.appName).localizedDescription,
+            "Accessibility permission for Subtitles to read TV.app is not granted."
         )
     }
 }

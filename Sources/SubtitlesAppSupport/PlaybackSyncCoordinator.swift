@@ -26,8 +26,12 @@ public final class PlaybackSyncCoordinator {
         )
     }
 
-    public func markAppleTVCalibrated() {
-        sourceLabel = "TV calibrated"
+    public func markQuickTimeSynced() {
+        markSynced(with: "QuickTime synced")
+    }
+
+    public func markSynced(with sourceLabel: String) {
+        self.sourceLabel = sourceLabel
     }
 
     public func markManual() {
