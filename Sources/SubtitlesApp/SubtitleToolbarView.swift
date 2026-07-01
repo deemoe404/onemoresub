@@ -10,7 +10,7 @@ protocol SubtitleToolbarViewDelegate: AnyObject {
 }
 
 final class SubtitleToolbarView: NSView {
-    static let glassRenderPadding: CGFloat = 8
+    static let glassRenderPadding: CGFloat = 12
 
     weak var delegate: SubtitleToolbarViewDelegate?
 
