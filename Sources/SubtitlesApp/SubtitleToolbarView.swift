@@ -159,14 +159,14 @@ private final class SubtitleToolbarModel: ObservableObject {
 }
 
 private enum SubtitleToolbarStatusKind {
-    case manual
+    case notSynced
     case appleTVCalibrated
     case unknown
 
     init(sourceLabel: String) {
         switch sourceLabel {
         case "Manual":
-            self = .manual
+            self = .notSynced
         case "TV calibrated":
             self = .appleTVCalibrated
         default:
@@ -176,8 +176,8 @@ private enum SubtitleToolbarStatusKind {
 
     var symbolName: String {
         switch self {
-        case .manual:
-            return "hand.tap.fill"
+        case .notSynced:
+            return "arrow.triangle.2.circlepath"
         case .appleTVCalibrated:
             return "appletv.fill"
         case .unknown:
@@ -187,7 +187,7 @@ private enum SubtitleToolbarStatusKind {
 
     var tint: Color {
         switch self {
-        case .manual:
+        case .notSynced:
             return .yellow
         case .appleTVCalibrated:
             return .green
@@ -198,8 +198,8 @@ private enum SubtitleToolbarStatusKind {
 
     var accessibilityLabel: String {
         switch self {
-        case .manual:
-            return "Manual playback"
+        case .notSynced:
+            return "Not synced"
         case .appleTVCalibrated:
             return "Apple TV calibrated playback"
         case .unknown:

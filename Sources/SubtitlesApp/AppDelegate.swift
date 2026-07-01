@@ -34,8 +34,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
 
     private struct MenuDisplayState: Equatable {
         let showHideTitle: String
-        let playPauseTitle: String
-        let offsetTitle: String
         let loadedFileTitle: String
         let accessibilityPermission: AccessibilityPermissionMenuState
     }
@@ -46,8 +44,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
 
     private var statusItem: NSStatusItem?
     private var showHideMenuItem: NSMenuItem?
-    private var playPauseMenuItem: NSMenuItem?
-    private var offsetMenuItem: NSMenuItem?
     private var loadedFileMenuItem: NSMenuItem?
     private var accessibilityPermissionMenuItem: NSMenuItem?
 
@@ -65,12 +61,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
         manualIsPlayingProvider: { [weak self] in
             self?.clock.isPlaying ?? false
         }
-    )
-    private var lastRenderState = PlaybackRenderState(
-        mediaTime: 0,
-        effectiveTime: 0,
-        isPlaying: false,
-        sourceLabel: "Manual"
     )
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -103,19 +93,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
         showHideMenuItem = showHide
         menu.addItem(showHide)
 
-        let playPause = NSMenuItem(title: "Play", action: #selector(togglePlayPauseFromMenu), keyEquivalent: "")
-        playPauseMenuItem = playPause
-        menu.addItem(playPause)
-
-        menu.addItem(NSMenuItem(title: "Reset to Start", action: #selector(resetPlaybackFromMenu), keyEquivalent: ""))
-        menu.addItem(.separator())
-
-        offsetMenuItem = NSMenuItem(title: "Offset: 0.0s", action: nil, keyEquivalent: "")
-        offsetMenuItem?.isEnabled = false
-        menu.addItem(offsetMenuItem!)
-        menu.addItem(NSMenuItem(title: "Offset -0.5s", action: #selector(decreaseOffsetFromMenu), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Offset +0.5s", action: #selector(increaseOffsetFromMenu), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Reset Offset", action: #selector(resetOffsetFromMenu), keyEquivalent: ""))
         menu.addItem(.separator())
 
         let accessibilityPermission = NSMenuItem(
@@ -214,7 +191,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
     @objc private func playbackDisplayTimerDidFire() {
         playbackDisplayTimer = nil
         let renderState = syncCoordinator.renderState(offset: clock.offset)
-        lastRenderState = renderState
         updatePanelPlaybackStateIfNeeded(renderState)
         updateMenuState()
         schedulePlaybackDisplayTimerIfNeeded(renderState: renderState)
@@ -270,27 +246,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
         updateMenuState()
     }
 
-    @objc private func togglePlayPauseFromMenu() {
-        togglePlayback(resetIfAtStart: false)
-    }
-
-    @objc private func resetPlaybackFromMenu() {
-        resetPlayback()
-    }
-
-    @objc private func decreaseOffsetFromMenu() {
-        adjustOffset(by: -0.5)
-    }
-
-    @objc private func increaseOffsetFromMenu() {
-        adjustOffset(by: 0.5)
-    }
-
-    @objc private func resetOffsetFromMenu() {
-        clock.setOffset(0)
-        refreshSubtitleText()
-    }
-
     @objc private func requestAccessibilityPermission() {
         let wasTrusted = AXIsProcessTrusted()
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
@@ -334,33 +289,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
         alert.runModal()
     }
 
-    private func togglePlayback(resetIfAtStart: Bool) {
-        guard timeline != nil else {
-            stopRenderTimer()
-            stopPlaybackDisplayTimer()
-            updateSubtitleTextIfNeeded("Drop SRT or VTT subtitle here")
-            return
-        }
-
-        if clock.isPlaying {
-            clock.pause()
-            stopRenderTimer()
-            stopPlaybackDisplayTimer()
-        } else {
-            clock.play(resetToStart: resetIfAtStart)
-        }
-        refreshSubtitleText()
-    }
-
-    private func resetPlayback() {
-        stopRenderTimer()
-        stopPlaybackDisplayTimer()
-        clock.reset()
-        clock.pause()
-        syncCoordinator.markManual()
-        refreshSubtitleText()
-    }
-
     private func adjustOffset(by delta: TimeInterval) {
         clock.adjustOffset(by: delta)
         refreshSubtitleText()
@@ -394,7 +322,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
 
     private func refreshSubtitleText() {
         let renderState = syncCoordinator.renderState(offset: clock.offset)
-        lastRenderState = renderState
 
         guard let timeline else {
             updateSubtitleTextIfNeeded("Drop SRT or VTT subtitle here")
@@ -448,8 +375,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
     private func updateMenuState() {
         let state = MenuDisplayState(
             showHideTitle: panelController.isVisible ? "Hide Subtitle Window" : "Show Subtitle Window",
-            playPauseTitle: lastRenderState.isPlaying ? "Pause" : "Play",
-            offsetTitle: String(format: "Offset: %.1fs", clock.offset),
             loadedFileTitle: document?.sourceURL?.lastPathComponent ?? "No Subtitle Loaded",
             accessibilityPermission: accessibilityPermissionMenuState()
         )
@@ -458,8 +383,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
         }
         lastMenuDisplayState = state
         showHideMenuItem?.title = state.showHideTitle
-        playPauseMenuItem?.title = state.playPauseTitle
-        offsetMenuItem?.title = state.offsetTitle
         loadedFileMenuItem?.title = state.loadedFileTitle
         accessibilityPermissionMenuItem?.title = state.accessibilityPermission.title
         accessibilityPermissionMenuItem?.isEnabled = state.accessibilityPermission.isEnabled
