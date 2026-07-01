@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Existing release tag to build and upload to
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build Release
+    runs-on: macos-26
+
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag_name }}
+      SUBTITLES_CODESIGN_IDENTITY: "-"
+      SUBTITLES_BUNDLE_IDENTIFIER: local.Subtitles
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag_name }}
+          persist-credentials: false
+
+      - name: Show toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcrun swift --version
+
+      - name: Prepare release metadata
+        run: |
+          version="${RELEASE_TAG#v}"
+          version="${version%%-*}"
+          version="${version%%+*}"
+
+          if [[ ! "$version" =~ ^[0-9]+[.][0-9]+[.][0-9]+$ ]]; then
+            echo "::error::Release tag must look like v1.2.3 or 1.2.3"
+            exit 1
+          fi
+
+          echo "SUBTITLES_BUNDLE_SHORT_VERSION=$version" >>"$GITHUB_ENV"
+          echo "SUBTITLES_BUNDLE_VERSION=${GITHUB_RUN_NUMBER}" >>"$GITHUB_ENV"
+
+      - name: Run checks
+        run: scripts/check.sh
+
+      - name: Package app zip
+        id: package
+        run: |
+          app_path="$(scripts/package-app.sh | tail -n 1)"
+          safe_tag="${RELEASE_TAG//\//-}"
+          asset_name="Subtitles-${safe_tag}-macOS.zip"
+          asset_path="dist/${asset_name}"
+
+          mkdir -p dist
+          ditto -c -k --norsrc --keepParent "$app_path" "$asset_path"
+
+          echo "asset_name=$asset_name" >>"$GITHUB_OUTPUT"
+          echo "asset_path=$asset_path" >>"$GITHUB_OUTPUT"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.asset_name }}
+          path: ${{ steps.package.outputs.asset_path }}
+          if-no-files-found: error
+
+      - name: Upload release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ASSET_PATH: ${{ steps.package.outputs.asset_path }}
+          ASSET_NAME: ${{ steps.package.outputs.asset_name }}
+        run: |
+          gh release view "$RELEASE_TAG" >/dev/null
+          if gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' | grep -Fx "$ASSET_NAME"; then
+            echo "::error::Release asset already exists: $ASSET_NAME"
+            exit 1
+          fi
+          gh release upload "$RELEASE_TAG" "$ASSET_PATH"

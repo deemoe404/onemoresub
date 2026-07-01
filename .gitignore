@@ -6,6 +6,7 @@ AGENTS.md
 .build/
 .swiftpm/
 build/
+dist/
 DerivedData/
 *.xcuserstate
 *.xcuserdatad/

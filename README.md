@@ -46,6 +46,21 @@ SUBTITLES_BUNDLE_IDENTIFIER="com.example.Subtitles"
 The same values can also be supplied as environment variables for one-off
 builds.
 
+## Release Automation
+
+GitHub Actions runs `scripts/check.sh` on pushes and pull requests to `main`.
+
+When a GitHub Release is published, the release workflow builds the tagged
+checkout on a macOS runner, packages `build/Subtitles.app`, zips the app bundle,
+and uploads the zip back to the Release assets. The release asset is ad-hoc
+signed by default; Developer ID signing and notarization are separate
+distribution steps.
+
+Release tags must use `vX.Y.Z` or `X.Y.Z` format. That tag is written into the
+app bundle short version, and the GitHub Actions run number is written into the
+bundle build number. Release asset uploads fail if an asset with the same name
+already exists.
+
 ## CLI Harness
 
 ```sh
