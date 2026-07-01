@@ -217,33 +217,27 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
         delegate?.subtitlePanelDidRequestAppleTVCalibration(self)
     }
 
-    private func performContainerMove(with _: NSEvent) {
+    private func performContainerMove(with event: NSEvent) {
         pendingChromeHide?.cancel()
         pendingChromeHide = nil
         interactionState = .moving
         overlayView.setInteractionTrackingSuspended(true)
 
         let initialFrame = panel.frame
-        let initialMouseLocation = NSEvent.mouseLocation
+        let initialMouseLocation = screenLocation(for: event)
 
         while let dragEvent = panel.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
-            if dragEvent.type == .leftMouseUp {
-                break
-            }
-
-            let currentMouseLocation = NSEvent.mouseLocation
-            let delta = NSPoint(
-                x: currentMouseLocation.x - initialMouseLocation.x,
-                y: currentMouseLocation.y - initialMouseLocation.y
-            )
-            let nextFrame = NSRect(
-                x: initialFrame.minX + delta.x,
-                y: initialFrame.minY + delta.y,
-                width: initialFrame.width,
-                height: initialFrame.height
+            let nextFrame = frameByMoving(
+                initialFrame: initialFrame,
+                initialMouseLocation: initialMouseLocation,
+                currentMouseLocation: screenLocation(for: dragEvent)
             )
             panel.setFrame(nextFrame, display: true)
             positionToolbarIfVisibleDuringTransientInteraction()
+
+            if dragEvent.type == .leftMouseUp {
+                break
+            }
         }
 
         applyPreferredPanelHeightAfterTransientInteraction()
@@ -257,6 +251,30 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
             interactionState = .idle
         }
         scheduleChromeHideIfNeeded()
+    }
+
+    private func screenLocation(for event: NSEvent) -> NSPoint {
+        guard let window = event.window else {
+            return NSEvent.mouseLocation
+        }
+        return window.convertPoint(toScreen: event.locationInWindow)
+    }
+
+    private func frameByMoving(
+        initialFrame: NSRect,
+        initialMouseLocation: NSPoint,
+        currentMouseLocation: NSPoint
+    ) -> NSRect {
+        let delta = NSPoint(
+            x: currentMouseLocation.x - initialMouseLocation.x,
+            y: currentMouseLocation.y - initialMouseLocation.y
+        )
+        return NSRect(
+            x: initialFrame.minX + delta.x,
+            y: initialFrame.minY + delta.y,
+            width: initialFrame.width,
+            height: initialFrame.height
+        )
     }
 
     private func performContainerResize(
