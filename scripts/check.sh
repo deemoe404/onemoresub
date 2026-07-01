@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export DEVELOPER_DIR="${DEVELOPER_DIR:-$HOME/Applications/Xcode-beta.app/Contents/Developer}"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/env.sh
+source "$ROOT_DIR/scripts/env.sh"
+load_subtitles_env "$ROOT_DIR"
 
+cd "$ROOT_DIR"
 xcrun swift test
 xcrun swift build --product SubtitlesApp
 xcrun swift run SubtitleHarness parse Fixtures/sample.srt >/tmp/subtitles-harness-srt.txt

@@ -1,8 +1,14 @@
 .DS_Store
+AGENTS.md
+.env
+.env.*
+!.env.local.example
 .build/
 .swiftpm/
 build/
 DerivedData/
 *.xcuserstate
+*.xcuserdatad/
+xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
 *.xcodeproj/xcuserdata/

@@ -12,11 +12,13 @@ The MVP flow is:
 
 ## Requirements
 
-- macOS with `$HOME/Applications/Xcode-beta.app`
-- SwiftPM through Xcode beta 27
+- macOS with Xcode or Xcode beta
+- SwiftPM through Xcode
 - No global dependency installation
 
-The scripts set `DEVELOPER_DIR` explicitly, so they do not require changing global `xcode-select`.
+The scripts use the active `xcode-select` toolchain by default. If
+`$HOME/Applications/Xcode-beta.app/Contents/Developer` exists, the scripts use
+it automatically. Set `DEVELOPER_DIR` to override that behavior.
 
 ## Commands
 
@@ -27,6 +29,22 @@ mise exec -- scripts/package-app.sh
 ```
 
 The packaged app is written to `build/Subtitles.app`.
+
+## Signing
+
+`scripts/package-app.sh` defaults to ad-hoc signing, so a public checkout can
+build a local `.app` bundle without a private Apple signing identity.
+
+For personal signed builds, put local-only overrides in `.env.local`. That file
+is ignored by git; `.env.local.example` documents the supported variables:
+
+```sh
+SUBTITLES_CODESIGN_IDENTITY="Apple Development: Your Name (TEAMID)"
+SUBTITLES_BUNDLE_IDENTIFIER="com.example.Subtitles"
+```
+
+The same values can also be supplied as environment variables for one-off
+builds.
 
 ## CLI Harness
 
