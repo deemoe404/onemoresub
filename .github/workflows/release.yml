@@ -63,7 +63,8 @@ jobs:
             env -u SUBTITLES_SPARKLE_FEED_URL -u SUBTITLES_SPARKLE_PUBLIC_ED_KEY \
             scripts/package-app.sh | tail -n 1
           )"
-          asset_name="One More Cap-${safe_tag}-macOS-AppStore-channel.zip"
+          # Keep artifact filenames URL-safe; GitHub normalizes spaces in release asset URLs.
+          asset_name="OneMoreCap-${safe_tag}-macOS-AppStore-channel.zip"
           asset_path="dist/${asset_name}"
 
           mkdir -p dist
@@ -143,7 +144,8 @@ jobs:
         run: |
           app_path="$(SUBTITLES_DISTRIBUTION_CHANNEL=github scripts/package-app.sh | tail -n 1)"
           safe_tag="${RELEASE_TAG//\//-}"
-          asset_name="One More Cap-${safe_tag}-macOS.zip"
+          # Keep artifact filenames URL-safe; Sparkle appcasts use this basename as the download URL.
+          asset_name="OneMoreCap-${safe_tag}-macOS.zip"
           asset_path="dist/${asset_name}"
 
           mkdir -p dist
