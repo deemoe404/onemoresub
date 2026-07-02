@@ -125,7 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
 
         menu.addItem(NSMenuItem(title: "Load Subtitle...", action: #selector(loadSubtitleFromMenu), keyEquivalent: ""))
 
-        let showHide = NSMenuItem(title: "Hide Subtitle Window", action: #selector(toggleSubtitleWindow), keyEquivalent: "")
+        let showHide = NSMenuItem(title: "Hide Subtitle", action: #selector(toggleSubtitleWindow), keyEquivalent: "")
         showHideMenuItem = showHide
         menu.addItem(showHide)
 
@@ -133,7 +133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
 
         if showsAutomationSettings {
             let automationPermission = NSMenuItem(
-                title: "Open Automation Settings...",
+                title: "Automation Permission...",
                 action: #selector(openAutomationPermissionSettingsFromMenu),
                 keyEquivalent: ""
             )
@@ -142,14 +142,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
         }
         if showsAccessibilitySettings {
             let accessibilityPermission = NSMenuItem(
-                title: "Open Accessibility Settings...",
+                title: "Accessibility Settings...",
                 action: #selector(openAccessibilityPermissionSettingsFromMenu),
                 keyEquivalent: ""
             )
             accessibilityPermissionMenuItem = accessibilityPermission
             menu.addItem(accessibilityPermission)
         }
-        menu.addItem(NSMenuItem(title: "Open Caption Settings...", action: #selector(openCaptionSettingsFromMenu), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Caption Settings...", action: #selector(openCaptionSettingsFromMenu), keyEquivalent: ""))
 
         if showsUpdateMenu {
             menu.addItem(.separator())
@@ -479,10 +479,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
 
     private func updateMenuState() {
         let state = MenuDisplayState(
-            showHideTitle: panelController.isVisible ? "Hide Subtitle Window" : "Show Subtitle Window",
+            showHideTitle: panelController.isVisible ? "Hide Subtitle" : "Show Subtitle",
             loadedFileTitle: document?.sourceURL?.lastPathComponent ?? "No Subtitle Loaded",
-            automationPermission: showsAutomationSettings ? settingsMenuState(title: "Open Automation Settings...") : nil,
-            accessibilityPermission: showsAccessibilitySettings ? settingsMenuState(title: "Open Accessibility Settings...") : nil,
+            automationPermission: showsAutomationSettings ? settingsMenuState(title: "Automation Permission...") : nil,
+            accessibilityPermission: showsAccessibilitySettings ? settingsMenuState(title: "Accessibility Settings...") : nil,
             canCheckForUpdates: !updateController.isConfigured || updateController.canCheckForUpdates
         )
         guard state != lastMenuDisplayState else {
@@ -491,9 +491,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
         lastMenuDisplayState = state
         showHideMenuItem?.title = state.showHideTitle
         loadedFileMenuItem?.title = state.loadedFileTitle
-        automationPermissionMenuItem?.title = state.automationPermission?.title ?? "Open Automation Settings..."
+        automationPermissionMenuItem?.title = state.automationPermission?.title ?? "Automation Permission..."
         automationPermissionMenuItem?.isEnabled = state.automationPermission?.isEnabled ?? false
-        accessibilityPermissionMenuItem?.title = state.accessibilityPermission?.title ?? "Open Accessibility Settings..."
+        accessibilityPermissionMenuItem?.title = state.accessibilityPermission?.title ?? "Accessibility Settings..."
         accessibilityPermissionMenuItem?.isEnabled = state.accessibilityPermission?.isEnabled ?? false
         checkForUpdatesMenuItem?.isEnabled = state.canCheckForUpdates
     }
