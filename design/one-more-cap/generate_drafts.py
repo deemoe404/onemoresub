@@ -20,6 +20,9 @@ PANEL_BOUNDARY_PHASE_DEGREES = 30.0
 HEMISPHERE_PITCH_DEGREES = 8.0
 CAMERA_FRONT_AZIMUTH_DEGREES = 60.0
 VISIBLE_BOUNDARY_DEPTH_THRESHOLD = 0.25
+MENU_BAR_GLYPH_SCALE = 1.34
+MENU_BAR_GLYPH_CENTER_X = 9.0
+MENU_BAR_GLYPH_CENTER_Y = 9.45
 
 
 @dataclass(frozen=True)
@@ -474,12 +477,14 @@ def menu_svg(name: str, factors: dict[str, float]) -> str:
     bottom_right_w = (bottom_bar_w - bottom_gap_w) - bottom_left_w
     bottom_right_x = bottom_bar_x + bottom_left_w + bottom_gap_w
     return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18">
+<g transform="translate({MENU_BAR_GLYPH_CENTER_X:.2f} {MENU_BAR_GLYPH_CENTER_Y:.2f}) scale({MENU_BAR_GLYPH_SCALE:.2f}) translate({-MENU_BAR_GLYPH_CENTER_X:.2f} {-MENU_BAR_GLYPH_CENTER_Y:.2f})">
   <path fill="black" d="M {crown_x:.2f} 9.30 C {crown_x+0.08:.2f} 6.68, {crown_x+2.18*crown:.2f} 5.04, {cx:.2f} 4.96 C {cx+2.56*crown:.2f} 4.88, {cx+3.92*crown:.2f} 6.62, {cx+4.02*crown:.2f} 9.16 C {cx+2.42*crown:.2f} 8.96, {crown_x+2.30*crown:.2f} 9.02, {crown_x:.2f} 9.30 Z"/>
   <path fill="black" d="M {cx-0.88:.2f} 4.80 C {cx-0.88:.2f} 4.42, {cx-0.50:.2f} 4.16, {cx+0.10:.2f} 4.16 C {cx+0.72:.2f} 4.16, {cx+1.08:.2f} 4.42, {cx+1.08:.2f} 4.80 V 5.08 H {cx-0.88:.2f} Z"/>
   <path fill="black" d="M {brim_x:.2f} 8.98 C {brim_x+1.20:.2f} 8.66, {brim_x+brim_w-1.08:.2f} 8.68, {brim_x+brim_w:.2f} 8.94 C {brim_x+brim_w+0.42:.2f} 9.04, {brim_x+brim_w+0.38:.2f} 9.68, {brim_x+brim_w-0.08:.2f} 9.78 H {brim_x:.2f} C {brim_x-0.38:.2f} 9.78, {brim_x-0.38:.2f} 9.12, {brim_x:.2f} 8.98 Z"/>
   <rect fill="black" x="{top_bar_x:.2f}" y="10.92" width="{top_bar_w:.2f}" height="1.18" rx="0.59"/>
   <rect fill="black" x="{bottom_bar_x:.2f}" y="13.04" width="{bottom_left_w:.2f}" height="1.28" rx="0.64"/>
   <rect fill="black" x="{bottom_right_x:.2f}" y="13.04" width="{bottom_right_w:.2f}" height="1.28" rx="0.64"/>
+</g>
 </svg>
 """
 
