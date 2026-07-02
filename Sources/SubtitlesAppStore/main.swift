@@ -8,6 +8,7 @@ runSubtitlesApp(
         ],
         defaultPlaybackTargetID: ExternalPlaybackTarget.quickTime.id,
         updateController: NoopAppUpdateController(),
+        accessibilityPermissionGranted: { false },
         showsAutomationSettings: true,
         showsAccessibilitySettings: false,
         showsUpdateMenu: false

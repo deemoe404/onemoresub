@@ -11,6 +11,7 @@ runSubtitlesApp(
         ],
         defaultPlaybackTargetID: ExternalPlaybackTarget.appleTV.id,
         updateController: SparkleAppUpdateController(),
+        accessibilityPermissionGranted: AppleTVPlaybackClient.isAccessibilityPermissionGranted,
         showsAutomationSettings: true,
         showsAccessibilitySettings: true,
         showsUpdateMenu: true

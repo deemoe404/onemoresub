@@ -24,6 +24,10 @@ public final class AppleTVPlaybackClient: ExternalPlaybackClient {
         )
     }
 
+    public static func isAccessibilityPermissionGranted() -> Bool {
+        AXIsProcessTrusted()
+    }
+
     init(
         runningApplicationProvider: @escaping (String) -> [NSRunningApplication]
     ) {

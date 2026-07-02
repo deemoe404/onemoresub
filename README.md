@@ -169,7 +169,7 @@ mise exec -- swift run SubtitleHarness at Fixtures/sample.srt 3.1 --offset 0.3
 
 ## Automation Permission
 
-The app reads QuickTime Player's current movie time through QuickTime's scripting interface for Sync calibration. macOS may require Automation permission for that behavior. If the hover Sync control cannot read QuickTime Player, use the menu item `Automation Permission...`, then allow One More Cap to read QuickTime Player in System Settings. The menu and hover controls remain usable without that permission.
+The app reads QuickTime Player's current movie time through QuickTime's scripting interface for Sync calibration. macOS may require Automation permission for that behavior. If the hover Sync control cannot read QuickTime Player, use `Permission > Automation...`, then allow One More Cap to read QuickTime Player in System Settings. The menu and hover controls remain usable without that permission.
 
 GitHub/full builds also include an Apple TV sync target. That path reads TV.app
 through Accessibility and is intentionally excluded from the App Store channel.

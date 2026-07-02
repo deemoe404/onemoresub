@@ -1,4 +1,5 @@
 @preconcurrency import Cocoa
+import CoreServices
 import SubtitleCore
 import SubtitlesAppSupport
 import UniformTypeIdentifiers
@@ -35,6 +36,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
     private struct SettingsMenuState: Equatable {
         let title: String
         let isEnabled: Bool
+        let isGranted: Bool
+    }
+
+    private struct PermissionGrantState: Equatable {
+        let automationGranted: Bool
+        let accessibilityGranted: Bool
+
+        static let unavailable = PermissionGrantState(
+            automationGranted: false,
+            accessibilityGranted: false
+        )
     }
 
     private struct MenuDisplayState: Equatable {
@@ -51,6 +63,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
     private let playbackClientsByID: [String: any ExternalPlaybackClient]
     private let playbackTargets: [ExternalPlaybackTarget]
     private let defaultPlaybackTargetID: String?
+    private let accessibilityPermissionGranted: () -> Bool
+    private let permissionGrantQueue = DispatchQueue(label: "app.onemorecap.permission-grants", qos: .utility)
     private let showsAutomationSettings: Bool
     private let showsAccessibilitySettings: Bool
     private let showsUpdateMenu: Bool
@@ -58,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
     private var statusItem: NSStatusItem?
     private var showHideMenuItem: NSMenuItem?
     private var loadedFileMenuItem: NSMenuItem?
+    private var permissionMenuItem: NSMenuItem?
     private var automationPermissionMenuItem: NSMenuItem?
     private var accessibilityPermissionMenuItem: NSMenuItem?
     private var checkForUpdatesMenuItem: NSMenuItem?
@@ -69,6 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
     private var lastSubtitleText: String?
     private var lastPanelPlaybackDisplayState: PanelPlaybackDisplayState?
     private var lastMenuDisplayState: MenuDisplayState?
+    private var permissionGrantState = PermissionGrantState.unavailable
     private lazy var syncCoordinator = PlaybackSyncCoordinator(
         manualTimeProvider: { [weak self] in
             self?.clock.currentMediaTime() ?? 0
@@ -90,6 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
         playbackClientsByID = clientsByID
         playbackTargets = targets
         defaultPlaybackTargetID = configuration.defaultPlaybackTargetID
+        accessibilityPermissionGranted = configuration.accessibilityPermissionGranted
         showsAutomationSettings = configuration.showsAutomationSettings
         showsAccessibilitySettings = configuration.showsAccessibilitySettings
         showsUpdateMenu = configuration.showsUpdateMenu
@@ -105,6 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
         setupStatusItem()
         panelController.show()
         refreshSubtitleText()
+        refreshPermissionGrantState()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -131,23 +149,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
 
         menu.addItem(.separator())
 
-        if showsAutomationSettings {
-            let automationPermission = NSMenuItem(
-                title: "Automation Permission...",
-                action: #selector(openAutomationPermissionSettingsFromMenu),
-                keyEquivalent: ""
-            )
-            automationPermissionMenuItem = automationPermission
-            menu.addItem(automationPermission)
-        }
-        if showsAccessibilitySettings {
-            let accessibilityPermission = NSMenuItem(
-                title: "Accessibility Settings...",
-                action: #selector(openAccessibilityPermissionSettingsFromMenu),
-                keyEquivalent: ""
-            )
-            accessibilityPermissionMenuItem = accessibilityPermission
-            menu.addItem(accessibilityPermission)
+        if showsAutomationSettings || showsAccessibilitySettings {
+            let permissionSettings = NSMenuItem(title: "Permission", action: nil, keyEquivalent: "")
+            let permissionSettingsMenu = NSMenu(title: "Permission")
+
+            if showsAutomationSettings {
+                let automationPermission = NSMenuItem(
+                    title: "Automation...",
+                    action: #selector(openAutomationPermissionSettingsFromMenu),
+                    keyEquivalent: ""
+                )
+                automationPermissionMenuItem = automationPermission
+                permissionSettingsMenu.addItem(automationPermission)
+            }
+            if showsAccessibilitySettings {
+                let accessibilityPermission = NSMenuItem(
+                    title: "Accessibility...",
+                    action: #selector(openAccessibilityPermissionSettingsFromMenu),
+                    keyEquivalent: ""
+                )
+                accessibilityPermissionMenuItem = accessibilityPermission
+                permissionSettingsMenu.addItem(accessibilityPermission)
+            }
+
+            permissionSettings.submenu = permissionSettingsMenu
+            permissionMenuItem = permissionSettings
+            menu.addItem(permissionSettings)
         }
         menu.addItem(NSMenuItem(title: "Caption Settings...", action: #selector(openCaptionSettingsFromMenu), keyEquivalent: ""))
 
@@ -203,6 +230,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
 
     func menuWillOpen(_ menu: NSMenu) {
         updateMenuState()
+        refreshPermissionGrantState()
     }
 
     private func stopRenderTimer() {
@@ -478,11 +506,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
     }
 
     private func updateMenuState() {
+        let automationPermission = showsAutomationSettings
+            ? settingsMenuState(title: "Automation...", isGranted: permissionGrantState.automationGranted)
+            : nil
+        let accessibilityPermission = showsAccessibilitySettings
+            ? settingsMenuState(title: "Accessibility...", isGranted: permissionGrantState.accessibilityGranted)
+            : nil
         let state = MenuDisplayState(
             showHideTitle: panelController.isVisible ? "Hide Subtitle" : "Show Subtitle",
             loadedFileTitle: document?.sourceURL?.lastPathComponent ?? "No Subtitle Loaded",
-            automationPermission: showsAutomationSettings ? settingsMenuState(title: "Automation Permission...") : nil,
-            accessibilityPermission: showsAccessibilitySettings ? settingsMenuState(title: "Accessibility Settings...") : nil,
+            automationPermission: automationPermission,
+            accessibilityPermission: accessibilityPermission,
             canCheckForUpdates: !updateController.isConfigured || updateController.canCheckForUpdates
         )
         guard state != lastMenuDisplayState else {
@@ -491,18 +525,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Subtit
         lastMenuDisplayState = state
         showHideMenuItem?.title = state.showHideTitle
         loadedFileMenuItem?.title = state.loadedFileTitle
-        automationPermissionMenuItem?.title = state.automationPermission?.title ?? "Automation Permission..."
+        permissionMenuItem?.title = "Permission"
+        automationPermissionMenuItem?.title = state.automationPermission?.title ?? "Automation..."
         automationPermissionMenuItem?.isEnabled = state.automationPermission?.isEnabled ?? false
-        accessibilityPermissionMenuItem?.title = state.accessibilityPermission?.title ?? "Accessibility Settings..."
+        automationPermissionMenuItem?.state = state.automationPermission?.isGranted == true ? .on : .off
+        accessibilityPermissionMenuItem?.title = state.accessibilityPermission?.title ?? "Accessibility..."
         accessibilityPermissionMenuItem?.isEnabled = state.accessibilityPermission?.isEnabled ?? false
+        accessibilityPermissionMenuItem?.state = state.accessibilityPermission?.isGranted == true ? .on : .off
         checkForUpdatesMenuItem?.isEnabled = state.canCheckForUpdates
     }
 
-    private func settingsMenuState(title: String) -> SettingsMenuState {
+    private func settingsMenuState(title: String, isGranted: Bool) -> SettingsMenuState {
         SettingsMenuState(
             title: title,
-            isEnabled: true
+            isEnabled: true,
+            isGranted: isGranted
         )
+    }
+
+    private func refreshPermissionGrantState() {
+        let shouldCheckAutomation = showsAutomationSettings
+        let shouldCheckAccessibility = showsAccessibilitySettings
+        let accessibilityPermissionGranted = accessibilityPermissionGranted
+
+        permissionGrantQueue.async { [weak self] in
+            let nextState = PermissionGrantState(
+                automationGranted: shouldCheckAutomation ? Self.automationPermissionGranted() : false,
+                accessibilityGranted: shouldCheckAccessibility ? accessibilityPermissionGranted() : false
+            )
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self, permissionGrantState != nextState else {
+                    return
+                }
+
+                permissionGrantState = nextState
+                updateMenuState()
+            }
+        }
+    }
+
+    private static func automationPermissionGranted() -> Bool {
+        var target = AEAddressDesc()
+        let bundleIdentifier = QuickTimePlaybackClient.bundleIdentifier
+        let createStatus = bundleIdentifier.withCString { pointer in
+            AECreateDesc(
+                DescType(typeApplicationBundleID),
+                pointer,
+                bundleIdentifier.utf8.count,
+                &target
+            )
+        }
+        guard createStatus == noErr else {
+            return false
+        }
+        defer {
+            AEDisposeDesc(&target)
+        }
+
+        return AEDeterminePermissionToAutomateTarget(
+            &target,
+            AEEventClass(typeWildCard),
+            AEEventID(typeWildCard),
+            false
+        ) == noErr
     }
 
     func subtitlePanel(_ panelController: SubtitlePanelController, didAdjustOffsetBy delta: TimeInterval) {
