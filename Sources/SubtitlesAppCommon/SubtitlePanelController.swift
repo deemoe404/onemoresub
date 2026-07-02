@@ -570,6 +570,7 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
         }
 
         snapPreviewPanel.order(.below, relativeTo: panel.windowNumber)
+        orderToolbarAbovePanelIfVisible()
 
         guard !snapPreviewDesiredVisible else {
             return
@@ -625,6 +626,7 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
             toolbarPanel.alphaValue = animated ? 0 : 1
             toolbarPanel.hasShadow = true
             toolbarPanel.orderFrontRegardless()
+            orderToolbarAbovePanelIfVisible()
             invalidateToolbarPanelShadow(afterAnimation: animated)
         }
 
@@ -709,6 +711,14 @@ final class SubtitlePanelController: NSObject, NSWindowDelegate, SubtitleOverlay
             display: true
         )
         toolbarPanel.invalidateShadow()
+    }
+
+    private func orderToolbarAbovePanelIfVisible() {
+        guard toolbarVisible, toolbarPanel.isVisible else {
+            return
+        }
+
+        toolbarPanel.order(.above, relativeTo: panel.windowNumber)
     }
 
     private func applyPreferredPanelHeightIfNeeded(display: Bool) {
