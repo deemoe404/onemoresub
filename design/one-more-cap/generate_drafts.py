@@ -494,15 +494,21 @@ def make_menu_assets() -> None:
         svg_path.write_text(menu_svg(name, factors), encoding="utf-8")
         for size in [18, 36, 72]:
             png_path = preview_dir / f"{name}-{size}.png"
-            subprocess.run(
-                ["qlmanage", "-t", "-s", str(size), "-o", str(preview_dir), str(svg_path)],
-                check=False,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            thumb = preview_dir / f"{svg_path.name}.png"
-            if thumb.exists():
-                thumb.replace(png_path)
+            rasterize_svg_to_png(svg_path, png_path, size)
+
+
+def rasterize_svg_to_png(svg_path: Path, png_path: Path, size: int) -> None:
+    script = ROOT / "rasterize_svg.swift"
+    subprocess.run(
+        [
+            "swift",
+            str(script),
+            str(svg_path),
+            str(png_path),
+            str(size),
+        ],
+        check=True,
+    )
 
 
 def export_icon_previews(icon_dir: Path) -> None:

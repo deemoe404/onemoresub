@@ -69,6 +69,10 @@ grep -q "format=srt" /tmp/subtitles-harness-srt.txt
 grep -q "format=webVTT" /tmp/subtitles-harness-vtt.txt
 grep -q "Second cue." /tmp/subtitles-harness-at.txt
 
+/usr/bin/python3 scripts/assert-png-template-alpha.py \
+    Resources/MenuBarIcon.png \
+    Resources/MenuBarIcon@2x.png
+
 GITHUB_APP_PATH="$(
     SUBTITLES_DISTRIBUTION_CHANNEL=github \
     SUBTITLES_APP_BUNDLE_NAME=OneMoreCap-GitHub \
@@ -80,6 +84,9 @@ test -f "$GITHUB_APP_PATH/Contents/Resources/Assets.car"
 test -f "$GITHUB_APP_PATH/Contents/Resources/AppIcon.icns"
 test -f "$GITHUB_APP_PATH/Contents/Resources/MenuBarIcon.png"
 test -f "$GITHUB_APP_PATH/Contents/Resources/MenuBarIcon@2x.png"
+/usr/bin/python3 scripts/assert-png-template-alpha.py \
+    "$GITHUB_APP_PATH/Contents/Resources/MenuBarIcon.png" \
+    "$GITHUB_APP_PATH/Contents/Resources/MenuBarIcon@2x.png"
 test "$(plutil -extract CFBundleDisplayName raw -o - "$GITHUB_APP_PATH/Contents/Info.plist")" = "$APP_NAME"
 test "$(plutil -extract CFBundleIconName raw -o - "$GITHUB_APP_PATH/Contents/Info.plist")" = "AppIcon"
 test "$(plutil -extract SUBDistributionChannel raw -o - "$GITHUB_APP_PATH/Contents/Info.plist")" = "github"
@@ -102,6 +109,9 @@ test -f "$APPSTORE_APP_PATH/Contents/Resources/Assets.car"
 test -f "$APPSTORE_APP_PATH/Contents/Resources/AppIcon.icns"
 test -f "$APPSTORE_APP_PATH/Contents/Resources/MenuBarIcon.png"
 test -f "$APPSTORE_APP_PATH/Contents/Resources/MenuBarIcon@2x.png"
+/usr/bin/python3 scripts/assert-png-template-alpha.py \
+    "$APPSTORE_APP_PATH/Contents/Resources/MenuBarIcon.png" \
+    "$APPSTORE_APP_PATH/Contents/Resources/MenuBarIcon@2x.png"
 test "$(plutil -extract CFBundleDisplayName raw -o - "$APPSTORE_APP_PATH/Contents/Info.plist")" = "$APP_NAME"
 test "$(plutil -extract CFBundleIconName raw -o - "$APPSTORE_APP_PATH/Contents/Info.plist")" = "AppIcon"
 test "$(plutil -extract SUBDistributionChannel raw -o - "$APPSTORE_APP_PATH/Contents/Info.plist")" = "appstore"
